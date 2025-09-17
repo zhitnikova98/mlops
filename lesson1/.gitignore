@@ -28,6 +28,7 @@ env/
 
 # MLflow
 mlruns/
+mlruns_docker/
 
 # Data and models
 data/

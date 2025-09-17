@@ -39,9 +39,11 @@ CMD ["python", "-m", "src.app.train"]
 # Production stage
 FROM base as production
 
-# Create non-root user for security
-RUN groupadd --gid 1000 appuser && \
-    useradd --uid 1000 --gid 1000 --create-home appuser
+# Install git for MLflow (optional but recommended)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 WORKDIR /app
 
@@ -55,6 +57,10 @@ COPY configs configs
 
 # MLflow configuration
 ENV MLFLOW_TRACKING_URI=file:./mlruns
+
+# Create non-root user for security AFTER setting up files
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid 1000 --create-home appuser
 
 # Create mlruns directory and set permissions
 RUN mkdir -p /app/mlruns && chown -R appuser:appuser /app
