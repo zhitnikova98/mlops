@@ -1,127 +1,118 @@
-# Lesson 1: Reproducible ML Pipeline with MLflow
+# Lesson 1: Воспроизводимый ML-проект с MLflow
 
-This project demonstrates a minimal reproducible ML pipeline using:
-- Logistic Regression on Iris dataset
-- MLflow tracking for experiments
-- Docker containerization
-- Code quality tools (black, ruff, mypy)
-- Unit tests with pytest
+> 🎯 **Цель урока:** Создать минимально воспроизводимый ML-проект с трекингом экспериментов и контейнеризацией
 
-## Project Structure
+## 📚 Материалы урока
+
+### 📖 Лекция
+> 🔗 **Ссылка на лекцию будет добавлена**
+
+### 🔬 Практика
+📂 **[Семинар: Пошаговое создание проекта](./seminar/README.md)**
+
+Подробный гайд с:
+- ✅ Объяснением каждого шага
+- ✅ Подводными камнями и их решениями  
+- ✅ Best practices для MLOps
+- ✅ Полным кодом практики
+
+---
+
+## 🚀 Быстрый старт
+
+### Локальная разработка
+```bash
+cd seminar/
+make install
+make train
+make mlflow-ui
+```
+
+### Docker разработка  
+```bash
+cd seminar/
+make docker-build
+make docker-run
+make mlflow-ui-docker
+```
+
+---
+
+## 🎯 Что вы изучите
+
+### 📋 Основные темы:
+- **Воспроизводимость** - фиксированные seeds, детерминированные результаты
+- **Управление зависимостями** - Poetry, lock файлы  
+- **MLflow трекинг** - параметры, метрики, модели, артефакты
+- **Качество кода** - линтеры, форматеры, pre-commit хуки
+- **Тестирование** - unit тесты, тесты детерминизма
+- **Контейнеризация** - Docker, multi-stage builds
+- **Автоматизация** - Makefile, CI/CD готовность
+
+### 🛠️ Технологии:
+- **Python 3.11** - современная версия Python
+- **Poetry** - управление зависимостями и окружением  
+- **MLflow** - трекинг экспериментов
+- **scikit-learn** - ML модель (LogisticRegression)
+- **pytest** - тестирование
+- **ruff + black** - качество кода
+- **Docker** - контейнеризация
+- **pre-commit** - автоматические проверки
+
+---
+
+## 📁 Структура проекта
 
 ```
 lesson1/
-├── configs/
-│   └── train.yaml          # Training configuration
-├── src/app/
-│   ├── __init__.py
-│   └── train.py            # Main training script
-├── tests/
-│   └── test_sanity.py      # Unit tests
-├── data/
-│   ├── raw/
-│   └── processed/
-├── models/
-├── pyproject.toml          # Poetry dependencies
-├── Makefile               # Common commands
-├── Dockerfile             # Container definition
-├── .dockerignore
-├── .gitignore
-└── README.md
+├── README.md              # Этот файл
+└── seminar/              # Практический код
+    ├── README.md         # Подробный гайд
+    ├── src/              # Исходный код  
+    ├── tests/            # Тесты
+    ├── configs/          # Конфигурации
+    ├── Makefile          # Автоматизация
+    ├── Dockerfile        # Контейнеризация
+    └── ...               # Остальные файлы проекта
 ```
 
-## Setup and Installation
+---
 
-### Prerequisites
-- Python 3.11
-- Poetry (recommended) or pip
-- Docker (optional)
+## ✅ Ожидаемые результаты
 
-### Install Dependencies
-```bash
-make install
-```
+После прохождения урока вы получите:
 
-## Usage
+### 🎯 Рабочий ML проект с:
+- **Детерминированными результатами** (accuracy ~96.7% на Iris)
+- **Полным MLflow трекингом** всех параметров и метрик
+- **Качественным кодом** с автоматическими проверками
+- **Docker контейнеризацией** для воспроизводимости
+- **Comprehensive тестированием** включая детерминизм
 
-### Training
-```bash
-make train
-```
+### 📊 Метрики качества:
+- **Accuracy**: ~96.7% на тестовой выборке Iris
+- **F1-macro**: ~96.7% 
+- **Детерминизм**: идентичные результаты при повторных запусках
+- **Покрытие тестами**: основные компоненты пайплайна
 
-Expected metrics:
-- Accuracy: ~0.9-1.0
-- F1 Score (macro): ~0.9-1.0
+---
 
-### Running Tests
-```bash
-make test
-```
+## 🔗 Ссылки
 
-### Code Quality
-```bash
-make lint
-```
+- 📂 **[Репозиторий](https://github.com/tam2511/mlops2025/tree/lesson1)**
+- 🔬 **[Практика](./seminar/README.md)** - подробный семинар
+- 🐳 **[Docker гайд](./seminar/DOCKER.md)** - контейнеризация
 
-### MLflow UI
+---
 
-**Local experiments:**
-```bash
-make mlflow-ui              # View local experiments
-```
+## 💡 Следующие шаги
 
-**Docker experiments:**
-```bash
-make mlflow-ui-docker       # View Docker experiments
-```
-Then open http://localhost:5000
+После завершения этого урока вы будете готовы к:
+- **Lesson 2**: Продвинутые пайплайны данных
+- **Lesson 3**: Model serving и API
+- **Lesson 4**: Мониторинг и деплой
+- **Lesson 5**: Распределенное обучение
 
-> **Note:** Local and Docker experiments are stored separately to avoid permission conflicts.
+---
 
-### Docker
-
-#### Quick Start
-```bash
-# Build and run production image
-make docker-build
-make docker-run
-
-# Development workflow
-make docker-build-dev
-make docker-run-dev
-```
-
-#### Docker Compose (Recommended)
-```bash
-# Training
-make compose-up-training
-
-# MLflow UI (http://localhost:5000)
-make compose-up-mlflow
-
-# Jupyter Lab (http://localhost:8888)
-make compose-up-jupyter
-
-# Full stack
-make compose-up
-```
-
-📖 **See [DOCKER.md](DOCKER.md) for detailed Docker setup guide**
-
-## MLflow Artifacts
-
-After training, MLflow artifacts are stored in `./mlruns/` directory:
-- Parameters: seed, test_size, C, max_iter
-- Metrics: accuracy, f1_macro
-- Model: sklearn LogisticRegression
-- Artifacts: train.yaml config
-
-## Reproducibility
-
-The pipeline uses fixed seeds (42) for:
-- Random state
-- NumPy random state
-- Sklearn train_test_split
-- Model initialization
-
-Running `make train` twice should produce identical results (within 0.001 tolerance).
+**🎓 Удачи в изучении MLOps!**

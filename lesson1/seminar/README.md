@@ -80,7 +80,7 @@ Poetry vs pip:
 ### Шаг 3: Создание структуры
 
 ```
-lesson1/
+lesson1/seminar/
 ├── configs/               # Конфигурационные файлы
 │   └── train.yaml
 ├── src/                   # Исходный код
