@@ -64,10 +64,19 @@ make lint
 ```
 
 ### MLflow UI
+
+**Local experiments:**
 ```bash
-make mlflow-ui
+make mlflow-ui              # View local experiments
+```
+
+**Docker experiments:**
+```bash
+make mlflow-ui-docker       # View Docker experiments
 ```
 Then open http://localhost:5000
+
+> **Note:** Local and Docker experiments are stored separately to avoid permission conflicts.
 
 ### Docker
 
