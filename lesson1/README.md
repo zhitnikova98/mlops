@@ -70,10 +70,34 @@ make mlflow-ui
 Then open http://localhost:5000
 
 ### Docker
+
+#### Quick Start
 ```bash
+# Build and run production image
 make docker-build
 make docker-run
+
+# Development workflow
+make docker-build-dev
+make docker-run-dev
 ```
+
+#### Docker Compose (Recommended)
+```bash
+# Training
+make compose-up-training
+
+# MLflow UI (http://localhost:5000)
+make compose-up-mlflow
+
+# Jupyter Lab (http://localhost:8888)
+make compose-up-jupyter
+
+# Full stack
+make compose-up
+```
+
+📖 **See [DOCKER.md](DOCKER.md) for detailed Docker setup guide**
 
 ## MLflow Artifacts
 

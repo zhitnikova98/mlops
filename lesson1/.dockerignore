@@ -37,3 +37,11 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Documentation and misc
+README.md
+SEMINAR.md
+docker-compose.yml
+
+# Notebooks (will be mounted as volume)
+notebooks/
