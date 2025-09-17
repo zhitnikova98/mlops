@@ -19,11 +19,12 @@ from sklearn.metrics import accuracy_score, f1_score
 import pickle
 import os
 
+
 def main():
     print("Загружаем данные...")
     iris = load_iris()
     X, y = iris.data, iris.target
-    
+
     print("Разбиваем данные...")
     # ПРОБЛЕМА: нет фиксированного random_state - каждый раз разные данные!
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
@@ -38,7 +39,7 @@ def main():
 
     # ПРОБЛЕМА: считаем метрики, но НЕ ЛОГИРУЕМ и не сохраняем!
     accuracy = accuracy_score(y_test, y_pred)
-    f1 = f1_score(y_test, y_pred, average='macro')
+    f1 = f1_score(y_test, y_pred, average="macro")
 
     print(f"Accuracy: {accuracy:.3f}")
     print(f"F1-score: {f1:.3f}")
@@ -47,9 +48,10 @@ def main():
     os.makedirs("simple_models", exist_ok=True)
     with open("simple_models/model.pkl", "wb") as f:
         pickle.dump(model, f)
-    
+
     print("Модель сохранена в simple_models/model.pkl")
     print("Готово!")
+
 
 if __name__ == "__main__":
     main()

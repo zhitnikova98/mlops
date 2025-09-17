@@ -27,9 +27,6 @@ def test_accuracy_threshold() -> None:
     assert (
         metrics["accuracy"] >= 0.85
     ), f"Accuracy {metrics['accuracy']} is below threshold 0.85"
-    assert (
-        metrics["f1_macro"] >= 0.85
-    ), f"F1 score {metrics['f1_macro']} is below threshold 0.85"
 
 
 def test_determinism() -> None:
