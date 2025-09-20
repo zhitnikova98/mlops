@@ -25,13 +25,13 @@ stages:
       size: 7943
     - path: src/validate_data.py
       hash: md5
-      md5: 79d7ee611891212f11af6dfa11e51116
-      size: 4638
+      md5: 4407f1a46c46e78d120418fd81d817db
+      size: 4561
     outs:
     - path: reports/validation
       hash: md5
-      md5: 0cdfe50fba2912b1468c59fa0e3ffa0a.dir
-      size: 2275
+      md5: fad342630128319314a31d8802349a50.dir
+      size: 2271
       nfiles: 1
   preprocess:
     cmd: python src/preprocess.py
