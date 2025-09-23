@@ -1,0 +1,21 @@
+# DVC generated
+.dvc/
+dvc.lock
+
+# Data and artifacts
+data/
+models/
+metrics/
+
+# MLflow
+mlruns/
+
+# Prefect
+.prefect/
+prefect.db
+
+# State files
+batch_state.json
+
+# Poetry
+poetry.lock

@@ -1,0 +1,14 @@
+# DVC generated
+.dvc/
+dvc.lock
+
+# Data and artifacts
+data/
+models/
+metrics/
+
+# MLflow
+mlruns/
+
+# Poetry
+poetry.lock
