@@ -49,7 +49,7 @@ def prepare_batch(batch_number: int, batch_size: int):
 
 
 @task
-def merge_batches(batch_number: int):
+def merge_batches(batch_number: int, batch_size: int = None):
     """Объединение всех батчей до указанного номера."""
     all_data = []
 
@@ -74,7 +74,7 @@ def merge_batches(batch_number: int):
 
 
 @task
-def preprocess_data(batch_number: int):
+def preprocess_data(batch_number: int, dataset_size: int = None):
     """Предобработка данных."""
     df = pd.read_csv(f"data/processed/dataset_v{batch_number}.csv")
 
@@ -92,7 +92,7 @@ def preprocess_data(batch_number: int):
 
 
 @task
-def create_dvc_tracking_file():
+def create_dvc_tracking_file(processed_size: int = None):
     """Создание файла для отслеживания DVC."""
     os.makedirs("data/processed", exist_ok=True)
     with open("data/processed/.dvc_tracked", "w") as f:

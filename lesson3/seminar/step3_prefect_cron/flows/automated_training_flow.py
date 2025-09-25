@@ -67,20 +67,20 @@ def automated_training_pipeline():
         print("Подготовлен пустой батч")
         return {"status": "empty_batch", "batch_number": batch_number}
 
-    # Объединяем все батчи
-    dataset_size = merge_batches(batch_number)
+    # Объединяем все батчи (зависит от batch_size)
+    dataset_size = merge_batches(batch_number, batch_size)
 
-    # Предобрабатываем данные
-    processed_size = preprocess_data(batch_number)
+    # Предобрабатываем данные (зависит от dataset_size)
+    processed_size = preprocess_data(batch_number, dataset_size)
 
-    # Создаем файл для DVC трекинга
-    create_dvc_tracking_file()
+    # Создаем файл для DVC трекинга (зависит от processed_size)
+    dvc_tracking = create_dvc_tracking_file(processed_size)
 
-    # Обучаем модель
-    train_metrics = train_model(batch_number, params)
+    # Обучаем модель (зависит от processed_size и dvc_tracking)
+    train_metrics = train_model(batch_number, params, processed_size, dvc_tracking)
 
-    # Оцениваем модель
-    eval_metrics = evaluate_model(batch_number, params)
+    # Оцениваем модель (зависит от train_metrics)
+    eval_metrics = evaluate_model(batch_number, params, train_metrics)
 
     # Объединяем все метрики
     all_metrics = {
@@ -124,14 +124,14 @@ def manual_training_pipeline(batch_number: int):
         print(f"Нет данных для батча {batch_number}")
         return {"status": "no_data", "batch_number": batch_number}
 
-    # Выполняем весь пайплайн
-    prepare_batch(batch_number, params["data"]["batch_size"])
-    merge_batches(batch_number)
-    processed_size = preprocess_data(batch_number)
-    create_dvc_tracking_file()
+    # Выполняем весь пайплайн с явными связями
+    batch_size = prepare_batch(batch_number, params["data"]["batch_size"])
+    dataset_size = merge_batches(batch_number, batch_size)
+    processed_size = preprocess_data(batch_number, dataset_size)
+    dvc_tracking = create_dvc_tracking_file(processed_size)
 
-    train_metrics = train_model(batch_number, params)
-    eval_metrics = evaluate_model(batch_number, params)
+    train_metrics = train_model(batch_number, params, processed_size, dvc_tracking)
+    eval_metrics = evaluate_model(batch_number, params, train_metrics)
 
     all_metrics = {
         "train_metrics": train_metrics,
