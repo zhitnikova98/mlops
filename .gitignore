@@ -34,6 +34,7 @@ env/
 # MLflow
 mlruns/
 mlruns_docker/
+mlartifacts/
 
 # DVC
 .dvc/cache/
