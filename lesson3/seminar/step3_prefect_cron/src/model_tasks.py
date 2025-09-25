@@ -15,7 +15,12 @@ from sklearn.metrics import accuracy_score, f1_score, classification_report
 
 
 @task
-def train_model(batch_number: int, params: dict):
+def train_model(
+    batch_number: int,
+    params: dict,
+    processed_size: int = None,
+    dvc_tracking: bool = None,
+):
     """Обучение модели с логированием в MLflow."""
     mlflow.set_tracking_uri(params["mlflow"]["tracking_uri"])
     mlflow.set_experiment(params["mlflow"]["experiment_name"])
@@ -81,7 +86,7 @@ def train_model(batch_number: int, params: dict):
 
 
 @task
-def evaluate_model(batch_number: int, params: dict):
+def evaluate_model(batch_number: int, params: dict, train_metrics: dict = None):
     """Оценка модели."""
     df = pd.read_csv(f"data/processed/dataset_processed_v{batch_number}.csv")
 

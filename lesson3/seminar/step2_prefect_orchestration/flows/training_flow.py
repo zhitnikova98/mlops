@@ -23,7 +23,7 @@ from model_tasks import train_model, evaluate_model
 @flow(name="ML Training Pipeline", log_prints=True)
 def training_pipeline(batch_number: int = 1):
     """
-    Основной поток ML пайплайна.
+    Основной поток ML пайплайна с явными связями между задачами.
 
     Args:
         batch_number: Номер батча для обучения
@@ -45,20 +45,20 @@ def training_pipeline(batch_number: int = 1):
         print("Нет данных для обработки")
         return
 
-    # Объединяем все батчи
-    merge_batches(batch_number)
+    # Объединяем все батчи (зависит от batch_size)
+    dataset_size = merge_batches(batch_number, batch_size)
 
-    # Предобрабатываем данные
-    processed_size = preprocess_data(batch_number)
+    # Предобрабатываем данные (зависит от dataset_size)
+    processed_size = preprocess_data(batch_number, dataset_size)
 
-    # Создаем файл для DVC трекинга
-    create_dvc_tracking_file()
+    # Создаем файл для DVC трекинга (зависит от processed_size)
+    dvc_tracking = create_dvc_tracking_file(processed_size)
 
-    # Обучаем модель
-    train_metrics = train_model(batch_number, params)
+    # Обучаем модель (зависит от processed_size и dvc_tracking)
+    train_metrics = train_model(batch_number, params, processed_size, dvc_tracking)
 
-    # Оцениваем модель
-    eval_metrics = evaluate_model(batch_number, params)
+    # Оцениваем модель (зависит от train_metrics)
+    eval_metrics = evaluate_model(batch_number, params, train_metrics)
 
     print(f"Пайплайн завершен для батча {batch_number}")
     print(f"Обработано данных: {processed_size}")

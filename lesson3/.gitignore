@@ -4,6 +4,7 @@
 
 # MLflow
 mlruns/
+mlartifacts/
 
 # Generated data and artifacts
 data/

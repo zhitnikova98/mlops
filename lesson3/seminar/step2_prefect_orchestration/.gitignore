@@ -9,6 +9,7 @@ metrics/
 
 # MLflow
 mlruns/
+mlartifacts/
 
 # Prefect
 .prefect/
