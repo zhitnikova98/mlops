@@ -3,6 +3,7 @@ name = "lesson3-step1"
 version = "0.1.0"
 description = "ML Pipeline orchestration with DVC and MLflow"
 authors = ["MLOps Course"]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.10"
