@@ -2,6 +2,8 @@ from src.model_converter import BlipONNXConverter
 from src.onnx_tester import ONNXModelTester
 from PIL import Image
 import os
+import torch
+import numpy as np
 
 
 def test_with_real_image():
@@ -34,7 +36,6 @@ def test_with_real_image():
     print(f"Размер после предобработки: {inputs.pixel_values.shape}")
 
     # Генерация caption PyTorch моделью
-    import torch
 
     with torch.no_grad():
         out = converter.model.generate(**inputs, max_length=50)
@@ -58,32 +59,66 @@ def test_with_real_image():
     try:
         inputs_onnx = converter.processor(image, return_tensors="pt")
         image_input = inputs_onnx.pixel_values.numpy()
-        input_ids = torch.tensor([[converter.processor.tokenizer.bos_token_id]]).numpy()
+        # Правильный token_id для BLIP (исправленная версия)
+        token_id = getattr(converter.processor.tokenizer, "bos_token_id", None)
+        if token_id is None:
+            token_id = getattr(converter.processor.tokenizer, "cls_token_id", 101)
+
+        print(f"Используем token_id: {token_id}")
+        input_ids = np.array(
+            [[token_id] * 16], dtype=np.int64
+        )  # Правильный размер [1, 16]
 
         print("Входные данные для ONNX:")
-        print(f"  - image: {image_input.shape}")
-        print(f"  - input_ids: {input_ids.shape}")
+        print(f"  - image: {image_input.shape} {image_input.dtype}")
+        print(f"  - input_ids: {input_ids.shape} {input_ids.dtype}")
 
-        # Пробуем разные варианты входов
-        input_variants = [
-            {"image": image_input, "input_ids": input_ids},
-            {"pixel_values": image_input, "input_ids": input_ids},
-        ]
+        # ONNX инференс с правильными входами
+        onnx_inputs = {"image": image_input, "input_ids": input_ids}
 
-        success = False
-        for i, variant in enumerate(input_variants):
+        print("\n🚀 Запуск ONNX инференса...")
+        outputs = tester.session.run(None, onnx_inputs)
+        print(f"✅ ONNX работает! Количество выходов: {len(outputs)}")
+
+        # Анализ выходов
+        for i, output in enumerate(outputs):
+            print(f"  Выход {i}: {output.shape}")
+
+        # Декодирование первого выхода (логиты)
+        logits = outputs[0]  # [1, 16, 30524]
+        if len(logits.shape) == 3 and logits.shape[2] == 30524:
+            # Берем последний токен из последовательности
+            last_token_logits = logits[0, -1, :]  # [30524]
+            predicted_id = int(np.argmax(last_token_logits))
+
+            # Декодируем токен
             try:
-                print(f"\nПробуем вариант {i+1}: {list(variant.keys())}")
-                outputs = tester.session.run(None, variant)
-                print(f"✅ ONNX работает! Размер выхода: {outputs[0].shape}")
-                success = True
-                break
-            except Exception as e:
-                print(f"❌ Вариант {i+1} не работает: {str(e)[:100]}...")
+                predicted_token = converter.processor.tokenizer.decode([predicted_id])
+                print(
+                    f"\n🎯 ONNX предсказанный токен: '{predicted_token}' (ID: {predicted_id})"
+                )
 
-        if not success:
-            print("\n⚠️ ONNX инференс не работает, но PyTorch модель работает отлично!")
-            print("Это нормально для сложных моделей как BLIP")
+                # Получаем топ-5 предсказаний для анализа
+                top5_ids = np.argsort(last_token_logits)[-5:][::-1]
+                print("Топ-5 предсказанных токенов:")
+                for rank, tid in enumerate(top5_ids, 1):
+                    try:
+                        token = converter.processor.tokenizer.decode([tid])
+                        prob = float(last_token_logits[tid])
+                        print(f"  {rank}. '{token}' (ID: {tid}, логит: {prob:.2f})")
+                    except Exception:
+                        print(f"  {rank}. <token_{tid}> (ID: {tid})")
+
+            except Exception as decode_error:
+                print(f"Не удалось декодировать токен {predicted_id}: {decode_error}")
+
+        print("\n📊 Сравнение результатов:")
+        print(f"✅ PyTorch полное описание: '{caption}'")
+        print(f"⚠️  ONNX предсказанный токен: '{predicted_token}' (только один токен)")
+        print("\n💡 Объяснение:")
+        print("   PyTorch использует полную генерацию текста (autoregressive)")
+        print("   ONNX экспортирует только один шаг предсказания токена")
+        print("   Для полной генерации нужно многократно вызывать ONNX модель")
 
     except Exception as e:
         print(f"❌ Ошибка подготовки данных для ONNX: {e}")

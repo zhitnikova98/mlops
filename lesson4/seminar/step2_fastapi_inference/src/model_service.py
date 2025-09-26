@@ -78,33 +78,20 @@ class ONNXImageCaptionService:
         onnx_inputs = self.preprocess_image(image)
         preprocess_time = time.time() - preprocess_start
 
-        # ONNX Инференс
+        # ONNX Инференс с итеративной генерацией
         inference_start = time.time()
         try:
-            onnx_outputs = self.session.run(None, onnx_inputs)
+            # Итеративная генерация как в эксперименте
+            caption = self._iterative_generation(onnx_inputs["image"], max_tokens=10)
             inference_time = time.time() - inference_start
 
-            # Постобработка - анализ ONNX выходов
             postprocess_start = time.time()
-
-            # Первый выход - логиты для генерации [batch, sequence, vocab_size]
-            logits = onnx_outputs[0]  # (1, 16, 30524)
-
-            # Берем последний токен из последовательности
-            last_token_logits = logits[0, -1, :]  # (30524,)
-            predicted_id = int(np.argmax(last_token_logits))
-
-            # Пытаемся декодировать токен
-            try:
-                predicted_token = self.processor.tokenizer.decode([predicted_id])
-            except Exception:
-                predicted_token = f"<token_id_{predicted_id}>"
-
-            # Генерируем простое описание (ONNX модель работает, но полная генерация сложна)
-            caption = f"Image processed - predicted token: {predicted_token}"
-
+            if caption is None:
+                caption = "Failed to generate caption"
+                success = False
+            else:
+                success = True
             postprocess_time = time.time() - postprocess_start
-            success = True
 
         except Exception as e:
             inference_time = time.time() - inference_start
@@ -125,14 +112,7 @@ class ONNXImageCaptionService:
                 "inference_ms": inference_time * 1000,
                 "postprocess_ms": postprocess_time * 1000,
             },
-            "onnx_details": (
-                {
-                    "predicted_token_id": predicted_id if success else None,
-                    "logits_shape": list(logits.shape) if success else None,
-                }
-                if "logits" in locals()
-                else {}
-            ),
+            "onnx_details": {},
         }
 
     def predict_batch(self, images: list[Image.Image]) -> tuple[list[dict], dict]:
@@ -170,3 +150,58 @@ class ONNXImageCaptionService:
         }
 
         return results, batch_stats
+
+    def _iterative_generation(
+        self, image_input: np.ndarray, max_tokens: int = 10
+    ) -> str:
+        """
+        Итеративная генерация текста с ONNX моделью
+        """
+        # Начальная последовательность токенов
+        token_id = getattr(self.processor.tokenizer, "bos_token_id", None)
+        if token_id is None:
+            token_id = getattr(self.processor.tokenizer, "cls_token_id", 101)
+
+        current_tokens = [token_id]
+        generated_tokens = []
+
+        for step in range(max_tokens):
+            # Подготавливаем input_ids текущей длины (заполняем до 16)
+            if len(current_tokens) < 16:
+                input_ids = current_tokens + [token_id] * (16 - len(current_tokens))
+            else:
+                input_ids = current_tokens[-16:]
+
+            input_ids_array = np.array([input_ids], dtype=np.int64)
+
+            # ONNX инференс
+            onnx_inputs = {"image": image_input, "input_ids": input_ids_array}
+
+            try:
+                outputs = self.session.run(None, onnx_inputs)
+                logits = outputs[0]  # [1, 16, 30524]
+
+                # Берем логиты для нужной позиции
+                pos = len(current_tokens) - 1 if len(current_tokens) <= 16 else 15
+                last_token_logits = logits[0, pos, :]
+                predicted_id = int(np.argmax(last_token_logits))
+
+                # Проверяем условия остановки
+                if predicted_id == 102:  # [SEP] token
+                    break
+
+                current_tokens.append(predicted_id)
+                generated_tokens.append(predicted_id)
+
+            except Exception:
+                break
+
+        # Декодируем полную последовательность
+        if generated_tokens:
+            try:
+                return self.processor.tokenizer.decode(
+                    generated_tokens, skip_special_tokens=True
+                )
+            except Exception:
+                return None
+        return None
