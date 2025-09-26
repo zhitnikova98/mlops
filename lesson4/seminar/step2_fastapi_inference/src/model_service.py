@@ -2,7 +2,6 @@ import onnxruntime as ort
 import numpy as np
 from PIL import Image
 from transformers import BlipProcessor
-import torch
 from typing import Optional
 import time
 
@@ -36,10 +35,10 @@ class ONNXImageCaptionService:
         self.processor = BlipProcessor.from_pretrained(self.model_name)
 
         self.loaded = True
-        print("Модель и процессор загружены успешно")
+        print("ONNX модель и процессор загружены успешно")
 
     def preprocess_image(self, image: Image.Image) -> dict:
-        """Предобработка изображения для модели"""
+        """Предобработка изображения для ONNX модели"""
         # Конвертация в RGB если нужно
         if image.mode != "RGB":
             image = image.convert("RGB")
@@ -47,16 +46,21 @@ class ONNXImageCaptionService:
         # Предобработка через процессор BLIP
         inputs = self.processor(image, return_tensors="pt")
 
-        return {
-            "image": inputs.pixel_values.numpy(),
-            "input_ids": torch.tensor(
-                [[self.processor.tokenizer.bos_token_id]]
-            ).numpy(),
-        }
+        # Подготовка входов для ONNX (правильные размеры и типы)
+        image_input = inputs.pixel_values.numpy()
+
+        # Правильный token_id для BLIP
+        token_id = getattr(self.processor.tokenizer, "bos_token_id", None)
+        if token_id is None:
+            token_id = getattr(self.processor.tokenizer, "cls_token_id", 101)
+
+        input_ids = np.array([[token_id] * 16], dtype=np.int64)
+
+        return {"image": image_input, "input_ids": input_ids}
 
     def predict(self, image: Image.Image) -> dict:
         """
-        Выполнение инференса для одного изображения
+        Выполнение ONNX инференса для одного изображения
 
         Args:
             image: PIL изображение
@@ -71,45 +75,75 @@ class ONNXImageCaptionService:
 
         # Предобработка
         preprocess_start = time.time()
-        inputs = self.preprocess_image(image)
+        onnx_inputs = self.preprocess_image(image)
         preprocess_time = time.time() - preprocess_start
 
-        # Инференс
+        # ONNX Инференс
         inference_start = time.time()
-        outputs = self.session.run(None, inputs)
-        inference_time = time.time() - inference_start
+        try:
+            onnx_outputs = self.session.run(None, onnx_inputs)
+            inference_time = time.time() - inference_start
 
-        # Постобработка
-        postprocess_start = time.time()
-        logits = outputs[0]
+            # Постобработка - анализ ONNX выходов
+            postprocess_start = time.time()
 
-        # Для простоты возвращаем сырые логиты
-        # В реальности нужна более сложная генерация текста
-        prediction_confidence = float(np.max(logits))
-        postprocess_time = time.time() - postprocess_start
+            # Первый выход - логиты для генерации [batch, sequence, vocab_size]
+            logits = onnx_outputs[0]  # (1, 16, 30524)
+
+            # Берем последний токен из последовательности
+            last_token_logits = logits[0, -1, :]  # (30524,)
+            predicted_id = int(np.argmax(last_token_logits))
+
+            # Пытаемся декодировать токен
+            try:
+                predicted_token = self.processor.tokenizer.decode([predicted_id])
+            except Exception:
+                predicted_token = f"<token_id_{predicted_id}>"
+
+            # Генерируем простое описание (ONNX модель работает, но полная генерация сложна)
+            caption = f"Image processed - predicted token: {predicted_token}"
+
+            postprocess_time = time.time() - postprocess_start
+            success = True
+
+        except Exception as e:
+            inference_time = time.time() - inference_start
+            postprocess_time = 0
+            caption = f"ONNX inference error: {str(e)[:100]}"
+            success = False
 
         total_time = time.time() - start_time
 
         return {
-            "prediction": f"Generated caption (confidence: {prediction_confidence:.3f})",
-            "logits_shape": list(logits.shape),
+            "prediction": caption,
+            "image_size": list(image.size),
+            "model_type": "ONNX BLIP",
+            "success": success,
             "timing": {
                 "total_ms": total_time * 1000,
                 "preprocess_ms": preprocess_time * 1000,
                 "inference_ms": inference_time * 1000,
                 "postprocess_ms": postprocess_time * 1000,
             },
+            "onnx_details": (
+                {
+                    "predicted_token_id": predicted_id if success else None,
+                    "logits_shape": list(logits.shape) if success else None,
+                }
+                if "logits" in locals()
+                else {}
+            ),
         }
 
-    def predict_batch(self, images: list[Image.Image]) -> list[dict]:
+    def predict_batch(self, images: list[Image.Image]) -> tuple[list[dict], dict]:
         """
-        Batch инференс (пока не поддерживается, выполняется последовательно)
+        Batch инференс (выполняется последовательно для ONNX)
 
         Args:
             images: Список PIL изображений
 
         Returns:
-            Список результатов инференса
+            Tuple из списка результатов и статистики батча
         """
         results = []
 
@@ -121,9 +155,13 @@ class ONNXImageCaptionService:
 
         batch_time = time.time() - batch_start
 
-        # Добавляем статистику батча
+        # Статистика батча
+        successful_requests = sum(1 for r in results if r.get("success", False))
+
         batch_stats = {
             "batch_size": len(images),
+            "successful_requests": successful_requests,
+            "failed_requests": len(images) - successful_requests,
             "total_batch_time_ms": batch_time * 1000,
             "avg_time_per_image_ms": batch_time * 1000 / len(images) if images else 0,
             "total_inference_time_ms": sum(

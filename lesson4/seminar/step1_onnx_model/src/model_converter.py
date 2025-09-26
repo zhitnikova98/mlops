@@ -33,7 +33,13 @@ class BlipONNXConverter:
 
         # Создание dummy input для трассировки
         dummy_image = torch.randn(1, 3, 384, 384)
-        dummy_input_ids = torch.randint(0, 1000, (1, 16))
+
+        # Правильный token_id для BLIP
+        token_id = getattr(self.processor.tokenizer, "bos_token_id", None)
+        if token_id is None:
+            token_id = getattr(self.processor.tokenizer, "cls_token_id", 101)
+
+        dummy_input_ids = torch.full((1, 16), token_id, dtype=torch.long)
 
         print("Конвертация в ONNX...")
 

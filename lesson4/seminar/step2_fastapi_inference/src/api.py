@@ -27,14 +27,16 @@ async def startup_event():
 
     if not os.path.exists(onnx_path):
         print(f"⚠️  ONNX модель не найдена: {onnx_path}")
-        print("Запустите сначала step1 для создания модели")
+        print(
+            "Скопируйте модель из step1: cp ../step1_onnx_model/models/blip_model.onnx models/"
+        )
         model_service = None
         return
 
     try:
         model_service = ONNXImageCaptionService(onnx_path)
         model_service.load_model()
-        print("✅ Модель загружена успешно")
+        print("✅ ONNX модель загружена успешно")
     except Exception as e:
         print(f"❌ Ошибка загрузки модели: {e}")
         model_service = None
@@ -59,7 +61,8 @@ async def health_check():
     return {
         "status": "healthy",
         "model_loaded": True,
-        "model_path": model_service.onnx_path,
+        "model_name": model_service.model_name,
+        "onnx_path": model_service.onnx_path,
     }
 
 
@@ -158,6 +161,7 @@ async def get_metrics():
 
     return {
         "model_loaded": True,
-        "model_path": model_service.onnx_path,
         "model_name": model_service.model_name,
+        "model_type": "ONNX BLIP",
+        "onnx_path": model_service.onnx_path,
     }

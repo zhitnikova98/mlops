@@ -3,7 +3,6 @@ import numpy as np
 from PIL import Image
 import requests
 from transformers import BlipProcessor
-import torch
 
 
 class ONNXModelTester:
@@ -52,23 +51,58 @@ class ONNXModelTester:
         # Подготовка входов для ONNX
         image_input = inputs.pixel_values.numpy()
 
-        # Создание dummy input_ids для начальной генерации
-        input_ids = torch.tensor([[self.processor.tokenizer.bos_token_id]]).numpy()
+        # ONNX модель ожидает input_ids размером [batch_size, 16]
+        # BLIP tokenizer может не иметь bos_token_id, используем cls_token_id или 101
+        bos_id = getattr(self.processor.tokenizer, "bos_token_id", None)
+        if bos_id is None:
+            bos_id = getattr(
+                self.processor.tokenizer, "cls_token_id", 101
+            )  # 101 - стандартный CLS для BERT-like моделей
 
-        # Запуск инференса
+        print(f"Используем token_id: {bos_id}")
+        # Создаем последовательность из 16 токенов
+        input_ids = np.array([[bos_id] * 16], dtype=np.int64)
+
+        print("Подготовленные входы для ONNX:")
+        print(f"  - image: {image_input.shape} {image_input.dtype}")
+        print(f"  - input_ids: {input_ids.shape} {input_ids.dtype}")
+
+        # Запуск инференса с правильными именами входов
         ort_inputs = {"image": image_input, "input_ids": input_ids}
 
         print("Запуск ONNX инференса...")
         try:
             ort_outputs = self.session.run(None, ort_inputs)
-            print("ONNX инференс завершен успешно!")
-            print(f"Размер выхода: {ort_outputs[0].shape}")
+            print("✅ ONNX инференс завершен успешно!")
+
+            # Анализ выходов
+            print(f"Количество выходов: {len(ort_outputs)}")
+            for i, output in enumerate(ort_outputs):
+                print(f"  Выход {i}: {output.shape} {output.dtype}")
+
+            # Первый выход - это логиты для генерации текста
+            logits = ort_outputs[0]
+
+            # Декодируем только если размер разумный
+            if len(logits.shape) == 3 and logits.shape[2] == 30524:  # vocabulary size
+                # Берем последний токен из последовательности
+                last_token_logits = logits[0, -1, :]
+                predicted_id = np.argmax(last_token_logits)
+
+                # Попробуем декодировать
+                try:
+                    token = self.processor.tokenizer.decode([predicted_id])
+                    print(f"Предсказанный токен: '{token}' (ID: {predicted_id})")
+                except Exception as decode_error:
+                    print(
+                        f"Не удалось декодировать токен ID {predicted_id}: {decode_error}"
+                    )
+
             return ort_outputs[0]
+
         except Exception as e:
-            print(f"⚠️ ONNX инференс не работает (известная проблема BLIP+ONNX): {e}")
-            print(
-                "✅ Модель конвертирована, но для полного тестирования нужны дополнительные настройки"
-            )
+            print(f"❌ ONNX инференс не работает: {e}")
+            print(f"Детали ошибки: {str(e)}")
             return None
 
     def benchmark_performance(self, num_runs: int = 100):
@@ -78,9 +112,15 @@ class ONNXModelTester:
         if self.session is None:
             raise ValueError("ONNX модель не загружена.")
 
-        # Подготовка данных для бенчмарка
+        # Подготовка данных для бенчмарка (используем те же правильные размеры)
         dummy_image = np.random.randn(1, 3, 384, 384).astype(np.float32)
-        dummy_input_ids = np.array([[30522]], dtype=np.int64)
+
+        # Используем тот же token_id что и в test_inference
+        token_id = getattr(self.processor.tokenizer, "bos_token_id", None)
+        if token_id is None:
+            token_id = getattr(self.processor.tokenizer, "cls_token_id", 101)
+
+        dummy_input_ids = np.array([[token_id] * 16], dtype=np.int64)
 
         ort_inputs = {"image": dummy_image, "input_ids": dummy_input_ids}
 
