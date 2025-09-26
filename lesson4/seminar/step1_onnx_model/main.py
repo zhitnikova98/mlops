@@ -38,10 +38,12 @@ def main():
     # Тест инференса
     try:
         outputs = tester.test_inference()
-        print(f"✅ ONNX инференс работает, размер выхода: {outputs.shape}")
+        if outputs is not None:
+            print(f"✅ ONNX инференс работает, размер выхода: {outputs.shape}")
+        else:
+            print("⚠️ ONNX инференс не работает, но модель конвертирована")
     except Exception as e:
         print(f"❌ Ошибка ONNX инференса: {e}")
-        return
 
     # Бенчмарк производительности
     print("\n4. Бенчмарк производительности:")

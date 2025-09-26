@@ -39,9 +39,12 @@ class BatchOptimizer:
 
     def prepare_dummy_batch(self, batch_size: int) -> dict:
         """Подготовка dummy батча для тестирования"""
-        # Создание фиктивных входных данных
+        # Создание фиктивных входных данных (соответствуют экспорту ONNX)
         dummy_images = np.random.randn(batch_size, 3, 384, 384).astype(np.float32)
-        dummy_input_ids = np.array([[30522] for _ in range(batch_size)], dtype=np.int64)
+        # ONNX модель ожидает input_ids размером 16
+        dummy_input_ids = np.array(
+            [[30522] * 16 for _ in range(batch_size)], dtype=np.int64
+        )
 
         return {"image": dummy_images, "input_ids": dummy_input_ids}
 
