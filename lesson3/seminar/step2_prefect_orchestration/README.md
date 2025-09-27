@@ -31,31 +31,40 @@ poetry install
 poetry shell
 ```
 
-3. Запуск Prefect server (в отдельном терминале):
+3. **Опционально** - Запуск Prefect server (в отдельном терминале):
 ```bash
-prefect server start
+poetry run prefect server start
 ```
+*Примечание: Если сервер не запущен, Prefect автоматически создаст временный сервер*
 
 4. Запуск MLflow UI (в отдельном терминале):
 ```bash
-mlflow ui --host 0.0.0.0 --port 5000
+poetry run mlflow ui --host 0.0.0.0 --port 5000
 ```
 
-5. Открыть Prefect UI: http://localhost:4200
+5. Открыть Prefect UI: http://localhost:4200 (если сервер запущен)
 
 ## Использование
 
-### Запуск пайплайна через Python
+### Запуск пайплайна через Python (рекомендуемый способ)
 
 ```bash
-# Обучение первой модели
-python flows/training_flow.py 1
+# Обучение первой модели (50 записей)
+poetry run python flows/training_flow.py 1
 
-# Обучение второй модели с дополнительными данными
-python flows/training_flow.py 2
+# Обучение второй модели с дополнительными данными (100 записей)
+poetry run python flows/training_flow.py 2
 
-# Обучение третьей модели
-python flows/training_flow.py 3
+# Обучение третьей модели (150 записей)
+poetry run python flows/training_flow.py 3
+```
+
+### Быстрый запуск через скрипт
+
+```bash
+# Использование автоматизированного скрипта
+./run_prefect_batch.sh 1
+./run_prefect_batch.sh 2
 ```
 
 ### Запуск пайплайна через Prefect CLI
@@ -101,6 +110,65 @@ dvc commit
 
 ## Мониторинг
 
-1. **Prefect UI**: http://localhost:4200 - статус выполнения пайплайнов
+1. **Prefect UI**: http://localhost:4200 - статус выполнения пайплайнов (если запущен сервер)
 2. **MLflow UI**: http://localhost:5000 - эксперименты и модели
-3. **Логи**: Детальные логи выполнения в Prefect UI
+3. **Логи**: Детальные логи выполнения в консоли и Prefect UI
+4. **Временный сервер**: Prefect автоматически создает временный сервер для отслеживания
+
+## Устранение неполадок
+
+### Проблема с подключением к MLflow
+
+Если видите ошибку подключения к MLflow:
+
+1. **Проверьте статус MLflow сервера:**
+   ```bash
+   curl -s http://localhost:5000/health || echo "MLflow не запущен"
+   ```
+
+2. **Запустите MLflow в отдельном терминале:**
+   ```bash
+   cd /path/to/step2_prefect_orchestration
+   poetry run mlflow ui --host 0.0.0.0 --port 5000
+   ```
+
+3. **Альтернативно, используйте локальное хранилище:**
+   Измените в `params.yaml`:
+   ```yaml
+   mlflow:
+     experiment_name: "prefect_pipeline"
+     tracking_uri: "./mlruns"  # Вместо http://localhost:5000
+   ```
+
+### Предупреждения Pydantic
+
+Предупреждения о `pyproject_toml_table_header` и `toml_file` в Pydantic безопасны и не влияют на работу пайплайна.
+
+### Рекомендуемый порядок запуска
+
+1. **Терминал 1** (MLflow, обязательно):
+   ```bash
+   cd step2_prefect_orchestration
+   poetry run mlflow ui --host 0.0.0.0 --port 5000
+   ```
+
+2. **Терминал 2** (Prefect Server, опционально):
+   ```bash
+   cd step2_prefect_orchestration
+   poetry run prefect server start
+   ```
+
+3. **Терминал 3** (пайплайн):
+   ```bash
+   cd step2_prefect_orchestration
+   poetry run python flows/training_flow.py 1
+   ```
+
+### Преимущества по сравнению с DVC
+
+- ✅ Автоматическое управление зависимостями между задачами
+- ✅ Веб-интерфейс для мониторинга выполнения
+- ✅ Обработка ошибок и повторные запуски
+- ✅ Параллельное выполнение независимых задач
+- ✅ Детальные логи и трассировка выполнения
+- ✅ Возможность планирования и автоматизации

@@ -41,54 +41,74 @@ mlflow ui --host 0.0.0.0 --port 5000
 
 ## Использование
 
+**ВАЖНО:** Данная версия DVC не поддерживает параметр `--vars`. Вместо этого используйте Poetry для выполнения скриптов напрямую.
+
 ### Обучение первой модели (базовая версия)
 
 ```bash
-# Загрузка исходных данных
-dvc repro get_data
+# 1. Активация Poetry окружения (обязательно!)
+poetry shell
 
-# Подготовка первого батча (первые 50 записей)
-dvc repro -s prepare_batch --vars batch_number=1
+# 2. Загрузка исходных данных
+poetry run python src/get_data.py
 
-# Объединение данных (пока только один батч)
-dvc repro -s merge_data --vars batch_number=1
+# 3. Подготовка первого батча (первые 50 записей)
+poetry run python src/prepare_batch.py 1
 
-# Предобработка данных
-dvc repro -s preprocess --vars batch_number=1
+# 4. Объединение данных (пока только один батч)
+poetry run python src/merge_data.py 1
 
-# Обучение модели
-dvc repro -s train --vars batch_number=1
+# 5. Предобработка данных
+poetry run python src/preprocess.py 1
 
-# Оценка модели
-dvc repro -s evaluate --vars batch_number=1
+# 6. Обучение модели (убедитесь, что MLflow UI запущен!)
+poetry run python src/train.py 1
+
+# 7. Оценка модели
+poetry run python src/evaluate.py 1
 ```
 
 ### Добавление новых данных и переобучение
 
 ```bash
 # Подготовка второго батча (записи 51-100)
-dvc repro -s prepare_batch --vars batch_number=2
+poetry run python src/prepare_batch.py 2
 
 # Объединение с предыдущими данными
-dvc repro -s merge_data --vars batch_number=2
+poetry run python src/merge_data.py 2
 
 # Предобработка объединенных данных
-dvc repro -s preprocess --vars batch_number=2
+poetry run python src/preprocess.py 2
 
 # Переобучение модели на расширенных данных
-dvc repro -s train --vars batch_number=2
+poetry run python src/train.py 2
 
 # Оценка новой модели
-dvc repro -s evaluate --vars batch_number=2
+poetry run python src/evaluate.py 2
 ```
 
-### Автоматический пайплайн для батча
+### Полный пайплайн для батча (скрипт)
 
-Можно выполнить весь пайплайн для конкретного батча одной командой:
+Создайте файл `run_batch.sh` для автоматизации:
 
 ```bash
-# Полный пайплайн для батча 3
-dvc repro --vars batch_number=3
+#!/bin/bash
+BATCH_NUMBER=$1
+
+if [ -z "$BATCH_NUMBER" ]; then
+    echo "Usage: ./run_batch.sh <batch_number>"
+    exit 1
+fi
+
+echo "Запуск пайплайна для батча $BATCH_NUMBER..."
+
+poetry run python src/prepare_batch.py $BATCH_NUMBER
+poetry run python src/merge_data.py $BATCH_NUMBER
+poetry run python src/preprocess.py $BATCH_NUMBER
+poetry run python src/train.py $BATCH_NUMBER
+poetry run python src/evaluate.py $BATCH_NUMBER
+
+echo "Пайплайн завершен для батча $BATCH_NUMBER"
 ```
 
 ## Мониторинг
@@ -98,6 +118,52 @@ dvc repro --vars batch_number=3
 2. **Метрики**: Файлы метрик сохраняются в папке `metrics/`
 
 3. **Версионирование**: DVC отслеживает версии данных и моделей
+
+## Устранение неполадок
+
+### Проблема с подключением к MLflow
+
+Если вы видите ошибку `Connection refused` при обучении модели:
+
+1. **Проверьте, запущен ли MLflow сервер:**
+   ```bash
+   curl -s http://localhost:5000/health || echo "MLflow не запущен"
+   ```
+
+2. **Запустите MLflow сервер в отдельном терминале:**
+   ```bash
+   cd /path/to/step1_dvc_mlflow_pipeline
+   poetry run mlflow ui --host 0.0.0.0 --port 5000
+   ```
+
+3. **Альтернативно, можно изменить настройки MLflow на локальное хранилище:**
+   Временно измените в `params.yaml`:
+   ```yaml
+   mlflow:
+     experiment_name: "incremental_training"
+     tracking_uri: "./mlruns"  # Вместо http://localhost:5000
+   ```
+
+### Проблема с DVC переменными
+
+Если DVC выдает ошибку `Could not find 'batch_number'`:
+- Используйте прямой вызов скриптов через `poetry run python` вместо `dvc repro`
+- Версия DVC в проекте не поддерживает параметр `--vars`
+
+### Рекомендуемый порядок запуска
+
+1. **Терминал 1** (MLflow сервер):
+   ```bash
+   cd step1_dvc_mlflow_pipeline
+   poetry run mlflow ui --host 0.0.0.0 --port 5000
+   ```
+
+2. **Терминал 2** (пайплайн):
+   ```bash
+   cd step1_dvc_mlflow_pipeline
+   poetry shell
+   # Выполните команды пайплайна
+   ```
 
 ## Демонстрация инкрементального обучения
 
