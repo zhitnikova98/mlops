@@ -1,64 +1,88 @@
 """
-Настройка деплойментов для автоматического пайплайна.
+Настройка деплойментов для автоматического пайплайна (Prefect 3.0).
 """
 
 import sys
 import os
+import asyncio
 
 # Добавляем flows в путь
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from prefect.deployments import Deployment
-from prefect.server.schemas.schedules import CronSchedule
-from flows.automated_training_flow import automated_training_pipeline
+from flows.automated_training_flow import (
+    automated_training_pipeline,
+    manual_training_pipeline,
+)
 
 
-def create_automated_deployment():
-    """Создание деплоймента с cron расписанием."""
+async def create_automated_deployment():
+    """Создание деплоймента с cron расписанием для Prefect 3.0."""
 
-    deployment = Deployment.build_from_flow(
-        flow=automated_training_pipeline,
+    print("Создание автоматического деплоймента...")
+
+    deployment = await automated_training_pipeline.to_deployment(
         name="automated-ml-pipeline",
         description="Автоматический ML пайплайн, запускающийся каждые 2 минуты",
         version="1.0.0",
-        schedule=CronSchedule(cron="*/2 * * * *", timezone="UTC"),  # каждые 2 минуты
-        work_queue_name="default",
-        parameters={},
+        cron="*/2 * * * *",  # каждые 2 минуты
         tags=["ml", "automated", "cron"],
     )
 
-    return deployment
+    deployment_id = await deployment.apply()
+    print(f"✅ Создан автоматический деплоймент: {deployment_id}")
+    return deployment_id
 
 
-def create_manual_deployment():
-    """Создание деплоймента для ручного запуска."""
-    from flows.automated_training_flow import manual_training_pipeline
+async def create_manual_deployment():
+    """Создание деплоймента для ручного запуска для Prefect 3.0."""
 
-    deployment = Deployment.build_from_flow(
-        flow=manual_training_pipeline,
+    print("Создание ручного деплоймента...")
+
+    deployment = await manual_training_pipeline.to_deployment(
         name="manual-ml-pipeline",
         description="Ручной запуск ML пайплайна для конкретного батча",
         version="1.0.0",
-        work_queue_name="default",
         tags=["ml", "manual"],
     )
 
-    return deployment
+    deployment_id = await deployment.apply()
+    print(f"✅ Создан ручной деплоймент: {deployment_id}")
+    return deployment_id
+
+
+async def main():
+    """Основная функция для создания всех деплойментов."""
+    print("🚀 Создание Prefect 3.0 деплойментов...")
+
+    try:
+        # Создаем оба деплоймента
+        auto_id = await create_automated_deployment()
+        manual_id = await create_manual_deployment()
+
+        print("\n✅ Все деплойменты созданы успешно!")
+        print(f"   - Автоматический: {auto_id}")
+        print(f"   - Ручной: {manual_id}")
+
+        print("\n🔧 Для запуска:")
+        print(
+            "   1. Запустите worker: poetry run prefect worker start --pool default-process-pool"
+        )
+        print("   2. Или используйте: poetry run prefect agent start -q default")
+        print("   3. Автоматический пайплайн начнет работать через 2 минуты")
+        print("\n🌐 Мониторинг:")
+        print("   - Prefect UI: http://localhost:4200")
+        print("   - MLflow UI: http://localhost:5000")
+
+    except Exception as e:
+        print(f"❌ Ошибка создания деплойментов: {e}")
+        print(
+            "💡 Убедитесь что Prefect сервер запущен: poetry run prefect server start"
+        )
+        return False
+
+    return True
 
 
 if __name__ == "__main__":
-    print("Создание деплойментов...")
-
-    # Создаем автоматический деплоймент
-    auto_deployment = create_automated_deployment()
-    auto_deployment_id = auto_deployment.apply()
-    print(f"Создан автоматический деплоймент: {auto_deployment_id}")
-
-    # Создаем ручной деплоймент
-    manual_deployment = create_manual_deployment()
-    manual_deployment_id = manual_deployment.apply()
-    print(f"Создан ручной деплоймент: {manual_deployment_id}")
-
-    print("\nДеплойменты созданы!")
-    print("Запустите Prefect agent для выполнения:")
-    print("prefect agent start -q default")
+    # Запускаем асинхронную функцию
+    success = asyncio.run(main())
