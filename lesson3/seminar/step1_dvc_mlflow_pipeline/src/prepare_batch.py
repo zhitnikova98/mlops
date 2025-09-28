@@ -24,24 +24,19 @@ def prepare_batch(batch_number: int):
     params = load_params()
     batch_size = params["data"]["batch_size"]
 
-    # Загружаем полный датасет
     df = pd.read_csv("data/raw/tips_full.csv")
 
-    # Вычисляем индексы для текущего батча
     start_idx = (batch_number - 1) * batch_size
     end_idx = batch_number * batch_size
 
-    # Извлекаем батч
     batch_df = df.iloc[start_idx:end_idx].copy()
 
     if len(batch_df) == 0:
         print(f"Батч {batch_number} пуст, данные закончились")
         return
 
-    # Создаем папку если её нет
     os.makedirs("data/processed", exist_ok=True)
 
-    # Сохраняем батч
     batch_df.to_csv(f"data/processed/batch_{batch_number}.csv", index=False)
 
     print(f"Подготовлен батч {batch_number}: {len(batch_df)} записей")

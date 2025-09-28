@@ -6,7 +6,7 @@ import sys
 import os
 import asyncio
 
-# Добавляем flows в путь
+
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from flows.automated_training_flow import (
@@ -24,7 +24,7 @@ async def create_automated_deployment():
         name="automated-ml-pipeline",
         description="Автоматический ML пайплайн, запускающийся каждые 2 минуты",
         version="1.0.0",
-        cron="*/2 * * * *",  # каждые 2 минуты
+        cron="*/2 * * * *",
         tags=["ml", "automated", "cron"],
     )
 
@@ -55,7 +55,7 @@ async def main():
     print("🚀 Создание Prefect 3.0 деплойментов...")
 
     try:
-        # Создаем оба деплоймента
+
         auto_id = await create_automated_deployment()
         manual_id = await create_manual_deployment()
 
@@ -84,5 +84,5 @@ async def main():
 
 
 if __name__ == "__main__":
-    # Запускаем асинхронную функцию
+
     success = asyncio.run(main())

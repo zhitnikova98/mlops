@@ -9,33 +9,27 @@ def main():
     """
     print("=== Шаг 1: Конвертация модели BLIP в ONNX ===\n")
 
-    # Конвертация модели
     converter = BlipONNXConverter()
     converter.load_model()
 
-    # Тест PyTorch модели
     print("\n1. Тестирование PyTorch модели:")
     pytorch_caption = converter.test_pytorch_model()
 
-    # Конвертация в ONNX
     print("\n2. Конвертация в ONNX:")
     onnx_path = converter.convert_to_onnx()
 
-    # Проверка что файл создался
     if os.path.exists(onnx_path):
         print(f"✅ ONNX модель успешно создана: {onnx_path}")
-        file_size = os.path.getsize(onnx_path) / (1024 * 1024)  # MB
+        file_size = os.path.getsize(onnx_path) / (1024 * 1024)
         print(f"Размер файла: {file_size:.1f} MB")
     else:
         print("❌ Ошибка: ONNX файл не создан")
         return
 
-    # Тестирование ONNX модели
     print("\n3. Тестирование ONNX модели:")
     tester = ONNXModelTester(onnx_path)
     tester.load_onnx_model()
 
-    # Тест инференса
     try:
         outputs = tester.test_inference()
         if outputs is not None:
@@ -45,7 +39,6 @@ def main():
     except Exception as e:
         print(f"❌ Ошибка ONNX инференса: {e}")
 
-    # Бенчмарк производительности
     print("\n4. Бенчмарк производительности:")
     performance = tester.benchmark_performance(num_runs=30)
 

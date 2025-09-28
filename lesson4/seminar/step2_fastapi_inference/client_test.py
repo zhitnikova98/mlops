@@ -84,7 +84,6 @@ class APIClient:
                         f"Среднее время на изображение: {stats['avg_time_per_image_ms']:.2f} мс"
                     )
 
-                    # Статистика по каждому изображению
                     for res in result["results"]:
                         inf_time = res["timing"]["inference_ms"]
                         print(f"  - {res['filename']}: {inf_time:.2f} мс")
@@ -101,13 +100,11 @@ async def main():
 
     client = APIClient()
 
-    # Проверка health endpoint
     is_healthy = await client.test_health()
     if not is_healthy:
         print("❌ Сервис недоступен. Убедитесь что он запущен.")
         return
 
-    # Загрузка тестовых изображений
     test_images = [
         (
             "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg",
@@ -121,10 +118,8 @@ async def main():
     for url, filename in test_images:
         await client.download_test_image(url, filename)
 
-    # Тестирование single prediction
     await client.test_single_prediction("test_images/demo.jpg")
 
-    # Тестирование batch prediction
     batch_images = [
         "test_images/demo.jpg",
         "test_images/random1.jpg",

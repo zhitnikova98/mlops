@@ -8,7 +8,6 @@ def main():
     """
     print("=== Шаг 3: Оптимизация размера батча для ONNX модели ===\n")
 
-    # Проверка наличия модели
     onnx_path = "models/blip_model.onnx"
     if not os.path.exists(onnx_path):
         print(f"❌ ONNX модель не найдена: {onnx_path}")
@@ -18,7 +17,6 @@ def main():
 
     print(f"✅ Найдена ONNX модель: {onnx_path}")
 
-    # Инициализация оптимизатора
     optimizer = BatchOptimizer(onnx_path)
     optimizer.load_model()
 
@@ -36,21 +34,17 @@ def main():
         max_batch_size=8, num_iterations=40, max_memory_mb=500, target_p95_ms=100
     )
 
-    # Сохранение результатов
     results_full.to_csv("results/optimization_results.csv", index=False)
     print("\n📊 Результаты сохранены: results/optimization_results.csv")
 
-    # Визуализация
     optimizer.plot_results(results_full, "results/batch_optimization.png")
 
-    # Сводка результатов
     print("\n" + "=" * 50)
     print("🎯 ИТОГОВЫЕ РЕКОМЕНДАЦИИ")
     print("=" * 50)
     print(f"Быстрый тест - оптимальный batch_size: {optimal_batch_quick}")
     print(f"Полный тест - оптимальный batch_size: {optimal_batch_full}")
 
-    # Показать топ-3 варианта
     print("\nТоп-3 размера батча по p95 latency per sample:")
     top_batches = results_full.nsmallest(3, "p95_latency_per_sample_ms")
     for i, (_, row) in enumerate(top_batches.iterrows(), 1):

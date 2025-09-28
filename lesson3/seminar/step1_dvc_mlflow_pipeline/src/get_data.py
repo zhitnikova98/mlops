@@ -17,13 +17,10 @@ def get_data():
     """Загрузка данных из внешнего источника."""
     params = load_params()
 
-    # Загружаем данные
     df = pd.read_csv(params["data"]["url"])
 
-    # Создаем папку если её нет
     os.makedirs("data/raw", exist_ok=True)
 
-    # Сохраняем полный датасет
     df.to_csv("data/raw/tips_full.csv", index=False)
 
     print(f"Загружено {len(df)} записей")

@@ -30,17 +30,14 @@ def train_model(batch_number: int):
     """
     params = load_params()
 
-    # Настройка MLflow
     mlflow.set_tracking_uri(params["mlflow"]["tracking_uri"])
     mlflow.set_experiment(params["mlflow"]["experiment_name"])
 
-    # Загрузка данных
     df = pd.read_csv(f"data/processed/dataset_processed_v{batch_number}.csv")
 
     X = df[["total_bill", "size"]]
     y = df["high_tip"]
 
-    # Разделение на train/test
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
@@ -48,9 +45,8 @@ def train_model(batch_number: int):
         random_state=params["model"]["seed"],
     )
 
-    # Начинаем MLflow run
     with mlflow.start_run(run_name=f"model_v{batch_number}"):
-        # Логируем параметры
+
         mlflow.log_params(
             {
                 "batch_number": batch_number,
@@ -60,32 +56,24 @@ def train_model(batch_number: int):
             }
         )
 
-        # Обучаем модель
         model = LogisticRegression(random_state=params["model"]["seed"])
         model.fit(X_train, y_train)
 
-        # Предсказания
         y_pred = model.predict(X_test)
 
-        # Метрики
         accuracy = accuracy_score(y_test, y_pred)
         f1 = f1_score(y_test, y_pred, average="weighted")
 
-        # Логируем метрики
         mlflow.log_metrics({"accuracy": accuracy, "f1_score": f1})
 
-        # Логируем модель
         mlflow.sklearn.log_model(model, f"model_v{batch_number}")
 
-        # Создаем папки если их нет
         os.makedirs("models", exist_ok=True)
         os.makedirs("metrics", exist_ok=True)
 
-        # Сохраняем модель локально
         with open(f"models/model_v{batch_number}.pkl", "wb") as f:
             pickle.dump(model, f)
 
-        # Сохраняем метрики локально
         metrics_data = {
             "accuracy": accuracy,
             "f1_score": f1,

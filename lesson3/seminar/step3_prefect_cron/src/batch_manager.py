@@ -36,7 +36,6 @@ def update_batch_state(batch_number: int, metrics: Dict[str, Any]):
     else:
         state = {"processed_batches": [], "next_batch": 1}
 
-    # Добавляем информацию о обработанном батче
     batch_info = {
         "batch_number": batch_number,
         "metrics": metrics,

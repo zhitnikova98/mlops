@@ -5,7 +5,7 @@
 import sys
 import os
 
-# Добавляем src в путь для импорта
+
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from prefect import flow
@@ -33,13 +33,10 @@ def automated_training_pipeline():
     """
     print("Запуск автоматизированного пайплайна")
 
-    # Загружаем параметры
     params = load_params()
 
-    # Получаем следующий номер батча
     batch_number = get_next_batch_number()
 
-    # Проверяем, не превышено ли максимальное количество батчей
     max_batches_reached = check_max_batches_reached(
         batch_number, params["automation"]["max_batches"]
     )
@@ -48,41 +45,32 @@ def automated_training_pipeline():
         print("Достигнуто максимальное количество батчей. Останавливаем.")
         return {"status": "max_batches_reached", "batch_number": batch_number}
 
-    # Получаем исходные данные (только если их нет)
     raw_data_path = "data/raw/tips_full.csv"
     if not os.path.exists(raw_data_path):
         get_raw_data(params["data"]["url"])
 
-    # Проверяем наличие данных для этого батча
     data_available = check_data_availability(batch_number, params["data"]["batch_size"])
 
     if not data_available:
         print(f"Нет данных для батча {batch_number}")
         return {"status": "no_data", "batch_number": batch_number}
 
-    # Подготавливаем текущий батч
     batch_size = prepare_batch(batch_number, params["data"]["batch_size"])
 
     if batch_size == 0:
         print("Подготовлен пустой батч")
         return {"status": "empty_batch", "batch_number": batch_number}
 
-    # Объединяем все батчи (зависит от batch_size)
     dataset_size = merge_batches(batch_number, batch_size)
 
-    # Предобрабатываем данные (зависит от dataset_size)
     processed_size = preprocess_data(batch_number, dataset_size)
 
-    # Создаем файл для DVC трекинга (зависит от processed_size)
     dvc_tracking = create_dvc_tracking_file(processed_size)
 
-    # Обучаем модель (зависит от processed_size и dvc_tracking)
     train_metrics = train_model(batch_number, params, processed_size, dvc_tracking)
 
-    # Оцениваем модель (зависит от train_metrics)
     eval_metrics = evaluate_model(batch_number, params, train_metrics)
 
-    # Объединяем все метрики
     all_metrics = {
         "train_metrics": train_metrics,
         "eval_metrics": eval_metrics,
@@ -90,7 +78,6 @@ def automated_training_pipeline():
         "dataset_size": dataset_size,
     }
 
-    # Обновляем состояние батча
     update_batch_state(batch_number, all_metrics)
 
     print(f"Автоматический пайплайн завершен для батча {batch_number}")
@@ -112,19 +99,16 @@ def manual_training_pipeline(batch_number: int):
 
     params = load_params()
 
-    # Получаем исходные данные (только если их нет)
     raw_data_path = "data/raw/tips_full.csv"
     if not os.path.exists(raw_data_path):
         get_raw_data(params["data"]["url"])
 
-    # Проверяем наличие данных
     data_available = check_data_availability(batch_number, params["data"]["batch_size"])
 
     if not data_available:
         print(f"Нет данных для батча {batch_number}")
         return {"status": "no_data", "batch_number": batch_number}
 
-    # Выполняем весь пайплайн с явными связями
     batch_size = prepare_batch(batch_number, params["data"]["batch_size"])
     dataset_size = merge_batches(batch_number, batch_size)
     processed_size = preprocess_data(batch_number, dataset_size)
@@ -145,9 +129,9 @@ def manual_training_pipeline(batch_number: int):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        # Ручной запуск для конкретного батча
+
         batch_num = int(sys.argv[1])
         manual_training_pipeline(batch_num)
     else:
-        # Автоматический запуск
+
         automated_training_pipeline()

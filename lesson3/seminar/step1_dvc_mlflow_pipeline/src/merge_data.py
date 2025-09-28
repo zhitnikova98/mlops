@@ -16,7 +16,6 @@ def merge_data(batch_number: int):
     """
     all_data = []
 
-    # Собираем все батчи от 1 до batch_number
     for i in range(1, batch_number + 1):
         batch_path = f"data/processed/batch_{i}.csv"
         if os.path.exists(batch_path):
@@ -30,16 +29,12 @@ def merge_data(batch_number: int):
         print("Нет данных для объединения")
         return
 
-    # Объединяем все данные
     merged_df = pd.concat(all_data, ignore_index=True)
 
-    # Удаляем дубликаты, если есть
     merged_df = merged_df.drop_duplicates().reset_index(drop=True)
 
-    # Создаем папку если её нет
     os.makedirs("data/processed", exist_ok=True)
 
-    # Сохраняем объединенный датасет
     merged_df.to_csv(f"data/processed/dataset_v{batch_number}.csv", index=False)
 
     print(f"Создан датасет версии {batch_number}: {len(merged_df)} записей")
