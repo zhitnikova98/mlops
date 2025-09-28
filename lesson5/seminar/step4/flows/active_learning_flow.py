@@ -1,339 +1,199 @@
-"""
-Active Learning flow using Prefect and MLflow.
-"""
+"""Prefect flow for Active Learning with incremental data addition."""
 
-import sys
-import os
 import logging
-from pathlib import Path
-
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
-
 from prefect import flow, task
-from data_manager import ActiveLearningDataManager
-from model_trainer import ModelTrainer
-from mlflow_tracker import MLflowTracker
-from active_learning import ActiveLearningManager
+from typing import Dict, Any
 
-logging.basicConfig(level=logging.INFO)
+from src.data_manager import ActiveLearningDataManager
+from src.model_trainer import ModelTrainer
+from src.active_learning import ActiveLearningManager
+from src.mlflow_tracker import MLflowTracker
+
 logger = logging.getLogger(__name__)
 
 
-@task(name="Initialize AL Data Manager", log_prints=True)
-def initialize_al_data_manager() -> ActiveLearningDataManager:
-    """Initialize and load data using ActiveLearningDataManager."""
-    print("Initializing ActiveLearningDataManager...")
-    data_manager = ActiveLearningDataManager(random_seed=42)
-    dataset_info = data_manager.load_and_split_data()
-
-    print(f"Dataset loaded: {dataset_info}")
+@task
+def setup_data_manager(random_seed: int = 42) -> ActiveLearningDataManager:
+    """Initialize and load data manager."""
+    data_manager = ActiveLearningDataManager(random_seed=random_seed)
+    data_manager.load_and_split_data()
     return data_manager
 
 
-@task(name="Initialize AL Manager", log_prints=True)
-def initialize_al_manager(
-    uncertainty_strategy: str = "entropy",
-) -> ActiveLearningManager:
-    """Initialize Active Learning manager."""
-    print(
-        f"Initializing Active Learning manager with {uncertainty_strategy} strategy..."
-    )
-    al_manager = ActiveLearningManager(uncertainty_strategy)
-    return al_manager
-
-
-@task(name="Initialize MLflow Tracker", log_prints=True)
-def initialize_mlflow_tracker() -> MLflowTracker:
-    """Initialize MLflow tracker."""
-    print("Initializing MLflow tracker...")
-    tracker = MLflowTracker(experiment_name="active_learning_step3")
-    experiment_info = tracker.get_experiment_info()
-    print(f"MLflow experiment: {experiment_info}")
-    return tracker
-
-
-@task(name="Setup Initial AL", log_prints=True)
-def setup_initial_active_learning(
-    data_manager: ActiveLearningDataManager, initial_percentage: float = 0.1
-) -> dict:
-    """Setup initial Active Learning state."""
-    print(
-        f"Setting up Active Learning with {initial_percentage*100:.0f}% initial data..."
-    )
-
-    init_info = data_manager.initialize_active_learning(initial_percentage)
-
-    print("Initial setup completed:")
-    print(f"  Labeled samples: {init_info['initial_labeled_size']}")
-    print(f"  Pool samples: {init_info['initial_pool_size']}")
-
-    return init_info
-
-
-@task(name="Train AL Model Iteration", log_prints=True)
-def train_al_model_iteration(
+@task
+def run_active_learning_experiment(
     data_manager: ActiveLearningDataManager,
-    al_manager: ActiveLearningManager,
-    tracker: MLflowTracker,
-    iteration: int,
-    previous_model_path: str = None,
-) -> dict:
-    """Train model for Active Learning iteration."""
-    print(f"Training Active Learning iteration {iteration}...")
+    sampling_strategy: str = "entropy",
+    initial_percentage: float = 0.05,
+    increment_percentage: float = 0.05,
+    max_iterations: int = 15,
+    random_seed: int = 42,
+) -> Dict[str, Any]:
+    """Run Active Learning experiment with incremental data addition."""
 
-    X_labeled, y_labeled = data_manager.get_labeled_data()
-    X_val, y_val = data_manager.get_validation_data()
-    X_test, y_test = data_manager.get_test_data()
+    al_manager = ActiveLearningManager(uncertainty_strategy=sampling_strategy)
+    data_manager.initialize_active_learning(initial_percentage=initial_percentage)
+    iteration_results = []
 
-    trainer = ModelTrainer()
+    for iteration in range(max_iterations):
+        X_labeled, y_labeled = data_manager.get_labeled_data()
 
-    model = trainer.train_model(X_labeled, y_labeled)
+        if len(X_labeled) >= len(data_manager.X_train_full):
+            print(f"All training data used at iteration {iteration + 1}")
+            break
 
-    val_metrics = trainer.evaluate_model(X_val, y_val, "validation")
-    test_metrics = trainer.evaluate_model(X_test, y_test, "test")
+        model_trainer = ModelTrainer(model_params={"random_seed": random_seed})
+        model_trainer.train_model(X_labeled, y_labeled)
 
-    model_path = f"models/catboost_model_al_iter_{iteration:02d}.cbm"
-    trainer.save_model(model_path)
+        training_info = {
+            "training_samples": len(X_labeled),
+            "features": X_labeled.shape[1],
+        }
 
-    metrics_dir = Path("metrics") / f"al_iteration_{iteration:02d}"
-    metrics_dir.mkdir(parents=True, exist_ok=True)
-
-    trainer.save_metrics(val_metrics, str(metrics_dir / "val_metrics.json"))
-    trainer.save_metrics(test_metrics, str(metrics_dir / "test_metrics.json"))
-
-    data_info = data_manager.get_data_info()
-    labeled_percentage = data_info.get("total_labeled_ratio", 0) * 100
-
-    run_id = tracker.log_training_iteration(
-        iteration=iteration,
-        train_size=len(X_labeled),
-        train_percentage=labeled_percentage,
-        model_params=trainer.model_params,
-        val_metrics=val_metrics,
-        test_metrics=test_metrics,
-        model=model,
-    )
-
-    result = {
-        "iteration": iteration,
-        "labeled_percentage": labeled_percentage,
-        "labeled_size": len(X_labeled),
-        "val_accuracy": val_metrics["accuracy"],
-        "test_accuracy": test_metrics["accuracy"],
-        "val_f1_macro": val_metrics["f1_macro"],
-        "test_f1_macro": test_metrics["f1_macro"],
-        "model_path": model_path,
-        "mlflow_run_id": run_id,
-        "model": model,
-    }
-
-    al_manager.update_training_history(iteration, result)
-
-    print(f"Iteration {iteration} completed:")
-    print(f"  Labeled size: {len(X_labeled)} ({labeled_percentage:.1f}%)")
-    print(f"  Val accuracy: {val_metrics['accuracy']:.4f}")
-    print(f"  Test accuracy: {test_metrics['accuracy']:.4f}")
-
-    return result
-
-
-@task(name="Select Next AL Batch", log_prints=True)
-def select_next_al_batch(
-    data_manager: ActiveLearningDataManager,
-    al_manager: ActiveLearningManager,
-    model,
-    batch_size: int,
-) -> dict:
-    """Select next batch of samples using Active Learning."""
-    print(f"Selecting next batch of {batch_size} samples...")
-
-    if data_manager.is_pool_empty():
-        print("Pool is empty, no more samples to select")
-        return {"samples_selected": 0, "pool_empty": True}
-
-    X_pool, y_pool = data_manager.get_pool_data()
-
-    actual_batch_size = min(batch_size, len(X_pool))
-
-    selected_X, selected_y, selected_indices = al_manager.select_next_batch(
-        X_pool, y_pool, model, actual_batch_size
-    )
-
-    selection_quality = al_manager.evaluate_selection_quality(selected_y, y_pool)
-
-    update_info = data_manager.add_samples_to_labeled_set(selected_indices)
-
-    result = {
-        "samples_selected": len(selected_indices),
-        "pool_empty": False,
-        "selection_quality": selection_quality,
-        "update_info": update_info,
-    }
-
-    print(f"Selected {len(selected_indices)} samples:")
-    print(f"  New labeled size: {update_info['new_labeled_size']}")
-    print(f"  Remaining pool size: {update_info['new_pool_size']}")
-    print(f"  Diversity ratio: {selection_quality['diversity_ratio']:.3f}")
-
-    return result
-
-
-@flow(name="Active Learning Pipeline", log_prints=True)
-def active_learning_pipeline(
-    initial_percentage: float = 0.1,
-    batch_size: int = 1000,
-    max_iterations: int = 10,
-    uncertainty_strategy: str = "entropy",
-):
-    """
-    Main Active Learning pipeline.
-
-    Args:
-        initial_percentage: Initial percentage of training data to label
-        batch_size: Size of each AL batch (default: 10% of remaining data)
-        max_iterations: Maximum number of AL iterations
-        uncertainty_strategy: Uncertainty sampling strategy
-    """
-    print("Starting Active Learning Pipeline")
-    print(f"Initial percentage: {initial_percentage*100:.0f}%")
-    print(f"Max iterations: {max_iterations}")
-    print(f"Uncertainty strategy: {uncertainty_strategy}")
-    print("=" * 60)
-
-    data_manager = initialize_al_data_manager()
-    al_manager = initialize_al_manager(uncertainty_strategy)
-    tracker = initialize_mlflow_tracker()
-
-    Path("models").mkdir(exist_ok=True)
-    Path("metrics").mkdir(exist_ok=True)
-
-    init_info = setup_initial_active_learning(data_manager, initial_percentage)
-
-    if batch_size <= 0:
-        batch_size = max(1000, int(0.1 * init_info["initial_pool_size"]))
-
-    print(f"Using batch size: {batch_size}")
-
-    results = []
-    current_model = None
-
-    for iteration in range(1, max_iterations + 1):
-        print(f"\n--- Active Learning Iteration {iteration} ---")
-
-        train_result = train_al_model_iteration(
-            data_manager=data_manager,
-            al_manager=al_manager,
-            tracker=tracker,
-            iteration=iteration,
-            previous_model_path=current_model,
+        val_metrics = model_trainer.evaluate_model(
+            data_manager.X_val, data_manager.y_val, "validation"
+        )
+        test_metrics = model_trainer.evaluate_model(
+            data_manager.X_test, data_manager.y_test, "test"
         )
 
-        results.append(train_result)
-        current_model = train_result["model"]
+        current_percentage = len(X_labeled) / len(data_manager.X_train_full) * 100
 
-        if iteration < max_iterations:
-            selection_result = select_next_al_batch(
-                data_manager=data_manager,
-                al_manager=al_manager,
-                model=current_model,
-                batch_size=batch_size,
-            )
-
-            if selection_result["pool_empty"]:
-                print(f"Pool exhausted at iteration {iteration}")
-                break
-
-            if selection_result["samples_selected"] == 0:
-                print(f"No samples selected at iteration {iteration}")
-                break
-
-    print("\n" + "=" * 60)
-    print("ACTIVE LEARNING SUMMARY")
-    print("=" * 60)
-
-    for result in results:
-        print(
-            f"Iteration {result['iteration']:2d}: "
-            f"{result['labeled_percentage']:5.1f}% labeled, "
-            f"Val Acc: {result['val_accuracy']:.4f}, "
-            f"Test Acc: {result['test_accuracy']:.4f}"
+        iteration_results.append(
+            {
+                "iteration": iteration + 1,
+                "labeled_samples": len(X_labeled),
+                "pool_samples": (
+                    len(data_manager.X_pool) if not data_manager.is_pool_empty() else 0
+                ),
+                "data_percentage": current_percentage,
+                "val_metrics": val_metrics,
+                "test_metrics": test_metrics,
+                "training_info": training_info,
+            }
         )
 
-    best_result = max(results, key=lambda x: x["val_accuracy"])
-    print(
-        f"\nBest iteration: {best_result['iteration']} "
-        f"(Val Acc: {best_result['val_accuracy']:.4f})"
-    )
+        print(f"Iteration {iteration + 1}:")
+        print(f"  Data usage: {current_percentage:.1f}%")
+        print(f"  Val accuracy: {val_metrics['accuracy']:.4f}")
+        print(f"  Test accuracy: {test_metrics['accuracy']:.4f}")
+        print(f"  Labeled samples: {len(X_labeled)}")
 
-    training_summary = al_manager.get_training_summary()
+        if data_manager.is_pool_empty():
+            print("Pool is empty, stopping Active Learning")
+            break
 
-    print("\nActive Learning completed!")
-    print(f"Total iterations: {len(results)}")
-    print(f"Final labeled percentage: {results[-1]['labeled_percentage']:.1f}%")
-    print(
-        f"Accuracy improvement: {training_summary.get('accuracy_improvement', 0):.4f}"
-    )
-    print("Check MLflow UI for detailed experiment tracking")
+        increment_samples = max(
+            1, int(increment_percentage * len(data_manager.X_train_full))
+        )
+        batch_size = min(increment_samples, len(data_manager.X_pool))
+
+        if batch_size <= 0:
+            break
+
+        X_pool, y_pool = data_manager.get_pool_data()
+        selected_X, selected_y, selected_indices = al_manager.select_next_batch(
+            X_pool, y_pool, model_trainer.model, batch_size
+        )
+        data_manager.add_samples_to_labeled_set(selected_indices)
 
     return {
-        "total_iterations": len(results),
-        "results": results,
-        "best_iteration": best_result,
-        "training_summary": training_summary,
-        "final_data_info": data_manager.get_data_info(),
+        "sampling_strategy": sampling_strategy,
+        "total_iterations": len(iteration_results),
+        "final_labeled_samples": (
+            iteration_results[-1]["labeled_samples"] if iteration_results else 0
+        ),
+        "final_data_percentage": (
+            iteration_results[-1]["data_percentage"] if iteration_results else 0
+        ),
+        "iteration_results": iteration_results,
     }
 
 
-@flow(name="Single AL Iteration", log_prints=True)
-def single_al_iteration_pipeline(
-    iteration: int = 1,
-    initial_percentage: float = 0.1,
-    uncertainty_strategy: str = "entropy",
-):
-    """
-    Run a single Active Learning iteration.
+@task
+def log_active_learning_to_mlflow(
+    al_results: Dict[str, Any], experiment_name: str = "step4_active_learning"
+) -> None:
+    """Log Active Learning results to MLflow."""
+    mlflow_tracker = MLflowTracker(experiment_name=experiment_name)
+    sampling_strategy = al_results["sampling_strategy"]
 
-    Args:
-        iteration: Iteration number
-        initial_percentage: Initial percentage of data to label
-        uncertainty_strategy: Uncertainty sampling strategy
-    """
-    print(
-        f"Running single AL iteration {iteration} with {initial_percentage*100:.0f}% initial data"
-    )
+    with mlflow_tracker.start_run(run_name=f"active_learning_{sampling_strategy}"):
+        final_results = al_results["iteration_results"][-1]
 
-    data_manager = initialize_al_data_manager()
-    al_manager = initialize_al_manager(uncertainty_strategy)
-    tracker = initialize_mlflow_tracker()
+        mlflow_tracker.log_params(
+            {
+                "method": "active_learning",
+                "sampling_strategy": sampling_strategy,
+                "total_iterations": al_results["total_iterations"],
+                "final_labeled_samples": al_results["final_labeled_samples"],
+                "final_data_percentage": al_results["final_data_percentage"],
+            }
+        )
 
-    Path("models").mkdir(exist_ok=True)
-    Path("metrics").mkdir(exist_ok=True)
+        mlflow_tracker.log_metrics(
+            {f"val_{k}": v for k, v in final_results["val_metrics"].items()}
+        )
+        mlflow_tracker.log_metrics(
+            {f"test_{k}": v for k, v in final_results["test_metrics"].items()}
+        )
 
-    setup_initial_active_learning(data_manager, initial_percentage)
-
-    result = train_al_model_iteration(
-        data_manager=data_manager,
-        al_manager=al_manager,
-        tracker=tracker,
-        iteration=iteration,
-    )
-
-    print(f"Single AL iteration {iteration} completed!")
-    return result
-
-
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "single":
-            iteration = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-            initial_pct = float(sys.argv[3]) if len(sys.argv) > 3 else 0.1
-            strategy = sys.argv[4] if len(sys.argv) > 4 else "entropy"
-            single_al_iteration_pipeline(iteration, initial_pct, strategy)
-        else:
-            max_iters = int(sys.argv[1])
-            strategy = sys.argv[2] if len(sys.argv) > 2 else "entropy"
-            active_learning_pipeline(
-                max_iterations=max_iters, uncertainty_strategy=strategy
+        for i, result in enumerate(al_results["iteration_results"]):
+            mlflow_tracker.log_metrics(
+                {
+                    f"iteration_{i+1}_val_accuracy": result["val_metrics"]["accuracy"],
+                    f"iteration_{i+1}_test_accuracy": result["test_metrics"][
+                        "accuracy"
+                    ],
+                    f"iteration_{i+1}_labeled_samples": result["labeled_samples"],
+                    f"iteration_{i+1}_data_percentage": result["data_percentage"],
+                },
+                step=i + 1,
             )
-    else:
-        active_learning_pipeline()
+
+
+@flow(name="Active Learning Pipeline")
+def active_learning_pipeline(
+    sampling_strategy: str = "entropy",
+    initial_percentage: float = 0.05,
+    increment_percentage: float = 0.05,
+    max_iterations: int = 15,
+    random_seed: int = 42,
+    experiment_name: str = "step4_active_learning",
+) -> Dict[str, Any]:
+    """Complete Active Learning pipeline with incremental data addition."""
+    data_manager = setup_data_manager(random_seed=random_seed)
+
+    al_results = run_active_learning_experiment(
+        data_manager=data_manager,
+        sampling_strategy=sampling_strategy,
+        initial_percentage=initial_percentage,
+        increment_percentage=increment_percentage,
+        max_iterations=max_iterations,
+        random_seed=random_seed,
+    )
+
+    log_active_learning_to_mlflow(
+        al_results=al_results, experiment_name=experiment_name
+    )
+
+    final_result = al_results["iteration_results"][-1]
+    summary = {
+        "method": "active_learning",
+        "strategy": sampling_strategy,
+        "test_accuracy": final_result["test_metrics"]["accuracy"],
+        "val_accuracy": final_result["val_metrics"]["accuracy"],
+        "final_labeled_samples": al_results["final_labeled_samples"],
+        "final_data_percentage": al_results["final_data_percentage"],
+        "total_iterations": al_results["total_iterations"],
+    }
+
+    print("=== ACTIVE LEARNING RESULTS ===")
+    print(f"Strategy: {summary['strategy']}")
+    print(f"Test Accuracy: {summary['test_accuracy']:.4f}")
+    print(f"Val Accuracy: {summary['val_accuracy']:.4f}")
+    print(f"Final Data Usage: {summary['final_data_percentage']:.1f}%")
+    print(f"Final Labeled Samples: {summary['final_labeled_samples']}")
+    print(f"Total Iterations: {summary['total_iterations']}")
+
+    return summary
