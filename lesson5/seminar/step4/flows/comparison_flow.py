@@ -15,10 +15,8 @@ logger = logging.getLogger(__name__)
 @task
 def setup_data_manager(random_seed: int = 42) -> ActiveLearningDataManager:
     """Initialize and load data manager."""
-    logger.info("Setting up data manager...")
     data_manager = ActiveLearningDataManager(random_seed=random_seed)
-    data_info = data_manager.load_and_split_data()
-    logger.info(f"Data loaded: {data_info}")
+    data_manager.load_and_split_data()
     return data_manager
 
 
@@ -27,12 +25,7 @@ def train_baseline_model(
     data_manager: ActiveLearningDataManager, random_seed: int = 42
 ) -> Dict[str, Any]:
     """Train baseline model on full dataset."""
-    logger.info("Training baseline model on full dataset...")
-
-    # Initialize baseline trainer
     baseline_trainer = BaselineTrainer(random_seed=random_seed)
-
-    # Train on full dataset
     training_info = baseline_trainer.train_full_dataset(
         X_train=data_manager.X_train_full,
         y_train=data_manager.y_train_full,
@@ -40,18 +33,12 @@ def train_baseline_model(
         y_val=data_manager.y_val,
         verbose=False,
     )
-
-    # Evaluate on validation set
     val_metrics = baseline_trainer.evaluate_model(
         data_manager.X_val, data_manager.y_val, "validation"
     )
-
-    # Evaluate on test set
     test_metrics = baseline_trainer.evaluate_model(
         data_manager.X_test, data_manager.y_test, "test"
     )
-
-    # Save model
     baseline_trainer.save_model("models/baseline_full_dataset.pkl")
 
     return {
@@ -70,44 +57,27 @@ def run_active_learning_experiment(
     random_seed: int = 42,
 ) -> Dict[str, Any]:
     """Run Active Learning experiment."""
-    logger.info(f"Running Active Learning with {sampling_strategy} sampling...")
-
     from src.active_learning import ActiveLearningManager
 
-    # Initialize Active Learning
     al_manager = ActiveLearningManager(uncertainty_strategy=sampling_strategy)
-
-    # Initialize with 10% of training data
-    init_info = data_manager.initialize_active_learning(initial_percentage=0.1)
-    logger.info(f"AL initialized: {init_info}")
-
-    # Track results across iterations
+    data_manager.initialize_active_learning(initial_percentage=0.1)
     iteration_results = []
 
     for iteration in range(max_iterations):
-        logger.info(f"Active Learning iteration {iteration + 1}/{max_iterations}")
-
-        # Train model on current labeled set
         X_labeled, y_labeled = data_manager.get_labeled_data()
         model_trainer = ModelTrainer(model_params={"random_seed": random_seed})
-
         model_trainer.train_model(X_labeled, y_labeled)
         training_info = {
             "training_samples": len(X_labeled),
             "features": X_labeled.shape[1],
         }
-
-        # Evaluate model
         val_metrics = model_trainer.evaluate_model(
             data_manager.X_val, data_manager.y_val, "validation"
         )
         test_metrics = model_trainer.evaluate_model(
             data_manager.X_test, data_manager.y_test, "test"
         )
-
-        # Check if pool is empty
         if data_manager.is_pool_empty():
-            logger.info("Pool is empty, stopping Active Learning")
             iteration_results.append(
                 {
                     "iteration": iteration + 1,
@@ -120,20 +90,15 @@ def run_active_learning_experiment(
             )
             break
 
-        # Select next batch using uncertainty sampling
         batch_size = min(
             int(0.1 * len(data_manager.X_train_full)), len(data_manager.X_pool)
         )
         if batch_size <= 0:
-            logger.info("No more samples to select, stopping")
             break
-
         X_pool, y_pool = data_manager.get_pool_data()
         selected_X, selected_y, selected_indices = al_manager.select_next_batch(
             X_pool, y_pool, model_trainer.model, batch_size
         )
-
-        # Add selected samples to labeled set
         update_info = data_manager.add_samples_to_labeled_set(selected_indices)
 
         iteration_results.append(
@@ -147,11 +112,6 @@ def run_active_learning_experiment(
                 "update_info": update_info,
             }
         )
-
-        logger.info(f"Iteration {iteration + 1} completed:")
-        logger.info(f"  Val accuracy: {val_metrics['accuracy']:.4f}")
-        logger.info(f"  Test accuracy: {test_metrics['accuracy']:.4f}")
-        logger.info(f"  Labeled samples: {len(X_labeled)}")
 
     return {
         "sampling_strategy": sampling_strategy,
@@ -170,14 +130,8 @@ def log_comparison_to_mlflow(
     experiment_name: str = "step4_comparison",
 ) -> None:
     """Log comparison results to MLflow."""
-    logger.info("Logging comparison results to MLflow...")
-
-    # Initialize MLflow tracker
     mlflow_tracker = MLflowTracker(experiment_name=experiment_name)
-
-    # Log baseline results
     with mlflow_tracker.start_run(run_name="baseline_full_dataset"):
-        # Log parameters
         mlflow_tracker.log_params(
             {
                 "method": "baseline",
@@ -189,21 +143,15 @@ def log_comparison_to_mlflow(
             }
         )
 
-        # Log metrics
         mlflow_tracker.log_metrics(
             {f"val_{k}": v for k, v in baseline_results["val_metrics"].items()}
         )
         mlflow_tracker.log_metrics(
             {f"test_{k}": v for k, v in baseline_results["test_metrics"].items()}
         )
-
-        # Log model info
         mlflow_tracker.log_params(baseline_results["training_info"])
-
-    # Log Active Learning results
     sampling_strategy = al_results["sampling_strategy"]
     with mlflow_tracker.start_run(run_name=f"active_learning_{sampling_strategy}"):
-        # Log parameters
         final_results = al_results["iteration_results"][-1]
 
         mlflow_tracker.log_params(
@@ -220,15 +168,12 @@ def log_comparison_to_mlflow(
             }
         )
 
-        # Log final metrics
         mlflow_tracker.log_metrics(
             {f"val_{k}": v for k, v in final_results["val_metrics"].items()}
         )
         mlflow_tracker.log_metrics(
             {f"test_{k}": v for k, v in final_results["test_metrics"].items()}
         )
-
-        # Log iteration metrics
         for i, result in enumerate(al_results["iteration_results"]):
             mlflow_tracker.log_metrics(
                 {
@@ -240,8 +185,6 @@ def log_comparison_to_mlflow(
                 },
                 step=i + 1,
             )
-
-    logger.info("Comparison results logged to MLflow successfully")
 
 
 @flow(name="Comparison Pipeline")
@@ -265,20 +208,10 @@ def comparison_pipeline(
     if sampling_strategies is None:
         sampling_strategies = ["entropy"]
 
-    logger.info("Starting comparison pipeline...")
-    logger.info(f"Sampling strategies: {sampling_strategies}")
-    logger.info(f"Max iterations: {max_iterations}")
-
-    # Setup data
     data_manager = setup_data_manager(random_seed=random_seed)
-
-    # Train baseline model
     baseline_results = train_baseline_model(data_manager, random_seed=random_seed)
-
-    # Run Active Learning experiments
     al_results = {}
     for strategy in sampling_strategies:
-        # Reset Active Learning state for each strategy
         data_manager.X_labeled = None
         data_manager.y_labeled = None
         data_manager.X_pool = None
@@ -293,15 +226,12 @@ def comparison_pipeline(
             random_seed=random_seed,
         )
 
-    # Log all results to MLflow
     for strategy, al_result in al_results.items():
         log_comparison_to_mlflow(
             baseline_results=baseline_results,
             al_results=al_result,
             experiment_name=experiment_name,
         )
-
-    # Compile final comparison
     comparison_summary = {
         "baseline": baseline_results,
         "active_learning": al_results,
@@ -311,7 +241,6 @@ def comparison_pipeline(
         },
     }
 
-    # Add AL summaries
     for strategy, al_result in al_results.items():
         final_result = al_result["iteration_results"][-1]
         comparison_summary["summary"][f"{strategy}_test_accuracy"] = final_result[
@@ -320,11 +249,6 @@ def comparison_pipeline(
         comparison_summary["summary"][
             f"{strategy}_data_usage"
         ] = f"{al_result['final_labeled_samples'] / baseline_results['training_info']['training_samples'] * 100:.1f}%"
-
-    logger.info("Comparison pipeline completed successfully!")
-    logger.info("Summary:")
-    for key, value in comparison_summary["summary"].items():
-        logger.info(f"  {key}: {value}")
 
     return comparison_summary
 

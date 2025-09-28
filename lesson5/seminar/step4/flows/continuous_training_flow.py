@@ -7,7 +7,6 @@ import os
 import logging
 from pathlib import Path
 
-# Add src to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from prefect import flow, task
@@ -15,7 +14,6 @@ from data_manager import DataManager
 from model_trainer import ModelTrainer
 from mlflow_tracker import MLflowTracker
 
-# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -51,33 +49,26 @@ def train_model_iteration(
     """Train model for a specific iteration with given percentage of data."""
     print(f"Training iteration {iteration} with {train_percentage*100:.0f}% of data...")
 
-    # Get incremental training data
     X_train, y_train = data_manager.get_incremental_train_data(train_percentage)
     X_val, y_val = data_manager.get_validation_data()
     X_test, y_test = data_manager.get_test_data()
 
-    # Initialize model trainer
     trainer = ModelTrainer()
 
-    # Train model
     model = trainer.train_model(X_train, y_train)
 
-    # Evaluate on validation and test sets
     val_metrics = trainer.evaluate_model(X_val, y_val, "validation")
     test_metrics = trainer.evaluate_model(X_test, y_test, "test")
 
-    # Save model
     model_path = f"models/catboost_model_iter_{iteration:02d}.cbm"
     trainer.save_model(model_path)
 
-    # Save metrics
     metrics_dir = Path("metrics") / f"iteration_{iteration:02d}"
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
     trainer.save_metrics(val_metrics, str(metrics_dir / "val_metrics.json"))
     trainer.save_metrics(test_metrics, str(metrics_dir / "test_metrics.json"))
 
-    # Log to MLflow
     run_id = tracker.log_training_iteration(
         iteration=iteration,
         train_size=len(X_train),
@@ -122,25 +113,19 @@ def continuous_training_pipeline(start_percentage: float = 0.1, iterations: int 
     print(f"Iterations: {iterations}")
     print("=" * 60)
 
-    # Initialize components
     data_manager = initialize_data_manager()
     tracker = initialize_mlflow_tracker()
 
-    # Create output directories
     Path("models").mkdir(exist_ok=True)
     Path("metrics").mkdir(exist_ok=True)
 
-    # Run training iterations
     results = []
     for i in range(1, iterations + 1):
-        # Calculate percentage for this iteration
         train_percentage = start_percentage * i
 
-        # Ensure we don't exceed 100%
         if train_percentage > 1.0:
             train_percentage = 1.0
 
-        # Train model for this iteration
         result = train_model_iteration(
             data_manager=data_manager,
             tracker=tracker,
@@ -150,12 +135,10 @@ def continuous_training_pipeline(start_percentage: float = 0.1, iterations: int 
 
         results.append(result)
 
-        # Stop if we've used all data
         if train_percentage >= 1.0:
             print(f"Reached 100% of training data at iteration {i}")
             break
 
-    # Summary
     print("\\n" + "=" * 60)
     print("CONTINUOUS TRAINING SUMMARY")
     print("=" * 60)
@@ -168,7 +151,6 @@ def continuous_training_pipeline(start_percentage: float = 0.1, iterations: int 
             f"Test Acc: {result['test_accuracy']:.4f}"
         )
 
-    # Find best iteration based on validation accuracy
     best_result = max(results, key=lambda x: x["val_accuracy"])
     print(
         f"\\nBest iteration: {best_result['iteration']} "
@@ -198,15 +180,12 @@ def single_iteration_pipeline(iteration: int = 1, train_percentage: float = 0.1)
         f"Running single CT iteration {iteration} with {train_percentage*100:.0f}% data"
     )
 
-    # Initialize components
     data_manager = initialize_data_manager()
     tracker = initialize_mlflow_tracker()
 
-    # Create output directories
     Path("models").mkdir(exist_ok=True)
     Path("metrics").mkdir(exist_ok=True)
 
-    # Run single iteration
     result = train_model_iteration(
         data_manager=data_manager,
         tracker=tracker,
@@ -219,17 +198,13 @@ def single_iteration_pipeline(iteration: int = 1, train_percentage: float = 0.1)
 
 
 if __name__ == "__main__":
-    # Parse command line arguments
     if len(sys.argv) > 1:
         if sys.argv[1] == "single":
-            # Run single iteration
             iteration = int(sys.argv[2]) if len(sys.argv) > 2 else 1
             percentage = float(sys.argv[3]) if len(sys.argv) > 3 else 0.1
             single_iteration_pipeline(iteration, percentage)
         else:
-            # Run full pipeline with custom iterations
             iterations = int(sys.argv[1])
             continuous_training_pipeline(iterations=iterations)
     else:
-        # Run full pipeline with default settings
         continuous_training_pipeline()

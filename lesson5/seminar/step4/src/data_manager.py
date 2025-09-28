@@ -13,11 +13,7 @@ class ActiveLearningDataManager:
     """Manages data loading and splitting for Active Learning."""
 
     def __init__(self, random_seed: int = 42):
-        """Initialize ActiveLearningDataManager.
-
-        Args:
-            random_seed: Random seed for reproducibility
-        """
+        """Initialize ActiveLearningDataManager."""
         self.random_seed = random_seed
         self.X_train_full = None
         self.X_val = None
@@ -26,8 +22,6 @@ class ActiveLearningDataManager:
         self.y_val = None
         self.y_test = None
         self._is_loaded = False
-
-        # Active Learning specific attributes
         self.X_labeled = None
         self.y_labeled = None
         self.X_pool = None
@@ -36,26 +30,12 @@ class ActiveLearningDataManager:
         self.pool_indices = []
 
     def load_and_split_data(self) -> Dict[str, Any]:
-        """Load Digits dataset and create train/val/test splits.
-
-        Returns:
-            Dictionary with dataset information
-        """
-        logger.info("Loading Digits dataset...")
-
-        # Load the dataset
+        """Load Digits dataset and create train/val/test splits."""
         digits = load_digits()
         X, y = digits.data, digits.target
-
-        logger.info(f"Dataset shape: {X.shape}")
-        logger.info(f"Number of classes: {len(np.unique(y))}")
-
-        # First split: separate test set (20%)
         X_temp, self.X_test, y_temp, self.y_test = train_test_split(
             X, y, test_size=0.2, random_state=self.random_seed, stratify=y
         )
-
-        # Second split: separate validation set (20% of remaining = 16% of total)
         self.X_train_full, self.X_val, self.y_train_full, self.y_val = train_test_split(
             X_temp,
             y_temp,
@@ -63,9 +43,7 @@ class ActiveLearningDataManager:
             random_state=self.random_seed,
             stratify=y_temp,
         )
-
         self._is_loaded = True
-
         dataset_info = {
             "total_samples": len(X),
             "train_samples": len(self.X_train_full),
@@ -75,241 +53,143 @@ class ActiveLearningDataManager:
             "classes": len(np.unique(y)),
             "class_distribution": dict(zip(*np.unique(y, return_counts=True))),
         }
-
-        logger.info("Data split completed:")
-        logger.info(f"  Train: {dataset_info['train_samples']} samples")
-        logger.info(f"  Validation: {dataset_info['val_samples']} samples")
-        logger.info(f"  Test: {dataset_info['test_samples']} samples")
-
         return dataset_info
-
-    def get_incremental_train_data(
-        self, percentage: float
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Get incremental training data based on percentage.
-
-        Args:
-            percentage: Percentage of training data to use (0.1 to 1.0)
-
-        Returns:
-            Tuple of (X_train_subset, y_train_subset)
-        """
-        if not self._is_loaded:
-            raise ValueError("Data not loaded. Call load_and_split_data() first.")
-
-        if not 0.1 <= percentage <= 1.0:
-            raise ValueError("Percentage must be between 0.1 and 1.0")
-
-        n_samples = int(percentage * len(self.X_train_full))
-
-        # Take first n_samples to ensure consistent incremental growth
-        X_train_subset = self.X_train_full[:n_samples]
-        y_train_subset = self.y_train_full[:n_samples]
-
-        logger.info(
-            f"Using {percentage*100:.0f}% of training data: {n_samples} samples"
-        )
-
-        return X_train_subset, y_train_subset
-
-    def get_validation_data(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Get validation data.
-
-        Returns:
-            Tuple of (X_val, y_val)
-        """
-        if not self._is_loaded:
-            raise ValueError("Data not loaded. Call load_and_split_data() first.")
-
-        return self.X_val, self.y_val
-
-    def get_test_data(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Get test data.
-
-        Returns:
-            Tuple of (X_test, y_test)
-        """
-        if not self._is_loaded:
-            raise ValueError("Data not loaded. Call load_and_split_data() first.")
-
-        return self.X_test, self.y_test
-
-    def get_data_info(self) -> Dict[str, Any]:
-        """Get information about current data splits.
-
-        Returns:
-            Dictionary with data information
-        """
-        if not self._is_loaded:
-            return {"status": "not_loaded"}
-
-        al_info = {}
-        if self.X_labeled is not None:
-            al_info.update(
-                {
-                    "labeled_samples": len(self.X_labeled),
-                    "pool_samples": len(self.X_pool) if self.X_pool is not None else 0,
-                    "total_labeled_ratio": (
-                        len(self.X_labeled) / len(self.X_train_full)
-                        if len(self.X_train_full) > 0
-                        else 0
-                    ),
-                }
-            )
-
-        return {
-            "status": "loaded",
-            "train_samples": len(self.X_train_full),
-            "val_samples": len(self.X_val),
-            "test_samples": len(self.X_test),
-            "features": self.X_train_full.shape[1],
-            **al_info,
-        }
 
     def initialize_active_learning(
         self, initial_percentage: float = 0.1
     ) -> Dict[str, Any]:
-        """Initialize Active Learning with initial labeled set.
-
-        Args:
-            initial_percentage: Percentage of training data to use as initial labeled set
-
-        Returns:
-            Dictionary with initialization information
-        """
+        """Initialize Active Learning with a small labeled set."""
         if not self._is_loaded:
             raise ValueError("Data not loaded. Call load_and_split_data() first.")
 
-        # Calculate initial labeled set size
-        n_initial = int(initial_percentage * len(self.X_train_full))
-
-        # Create initial labeled set (first n_initial samples)
-        self.labeled_indices = list(range(n_initial))
-        self.pool_indices = list(range(n_initial, len(self.X_train_full)))
-
-        # Set labeled and pool data
-        self.X_labeled = self.X_train_full[self.labeled_indices].copy()
-        self.y_labeled = self.y_train_full[self.labeled_indices].copy()
-        self.X_pool = self.X_train_full[self.pool_indices].copy()
-        self.y_pool = self.y_train_full[self.pool_indices].copy()
+        n_initial = max(1, int(initial_percentage * len(self.X_train_full)))
+        initial_indices = np.random.RandomState(self.random_seed).choice(
+            len(self.X_train_full), size=n_initial, replace=False
+        )
+        self.labeled_indices = initial_indices.tolist()
+        self.pool_indices = [
+            i for i in range(len(self.X_train_full)) if i not in self.labeled_indices
+        ]
+        self._update_active_learning_sets()
 
         init_info = {
-            "initial_labeled_size": len(self.X_labeled),
-            "initial_pool_size": len(self.X_pool),
+            "initial_labeled_samples": len(self.labeled_indices),
+            "initial_pool_samples": len(self.pool_indices),
             "initial_percentage": initial_percentage,
             "labeled_class_distribution": dict(
                 zip(*np.unique(self.y_labeled, return_counts=True))
             ),
-            "pool_class_distribution": dict(
-                zip(*np.unique(self.y_pool, return_counts=True))
-            ),
         }
-
-        logger.info("Active Learning initialized:")
-        logger.info(f"  Initial labeled: {len(self.X_labeled)} samples")
-        logger.info(f"  Pool: {len(self.X_pool)} samples")
-        logger.info(
-            f"  Labeled classes: {list(init_info['labeled_class_distribution'].keys())}"
-        )
-
         return init_info
 
+    def _update_active_learning_sets(self):
+        """Update labeled and pool sets based on current indices."""
+        self.X_labeled = self.X_train_full[self.labeled_indices]
+        self.y_labeled = self.y_train_full[self.labeled_indices]
+        self.X_pool = self.X_train_full[self.pool_indices]
+        self.y_pool = self.y_train_full[self.pool_indices]
+
     def add_samples_to_labeled_set(
-        self, selected_indices: np.ndarray
+        self, pool_indices_to_add: np.ndarray
     ) -> Dict[str, Any]:
-        """Add selected samples from pool to labeled set.
+        """Add samples from pool to labeled set."""
+        if len(pool_indices_to_add) == 0:
+            return {"samples_added": 0}
 
-        Args:
-            selected_indices: Indices of samples to move from pool to labeled set
+        actual_indices = [self.pool_indices[i] for i in pool_indices_to_add]
+        self.labeled_indices.extend(actual_indices)
+        for idx in sorted(pool_indices_to_add, reverse=True):
+            self.pool_indices.pop(idx)
 
-        Returns:
-            Dictionary with update information
-        """
-        if self.X_pool is None or self.y_pool is None:
-            raise ValueError(
-                "Pool not initialized. Call initialize_active_learning() first."
-            )
-
-        # Get selected samples
-        selected_X = self.X_pool[selected_indices]
-        selected_y = self.y_pool[selected_indices]
-
-        # Add to labeled set
-        self.X_labeled = np.vstack([self.X_labeled, selected_X])
-        self.y_labeled = np.concatenate([self.y_labeled, selected_y])
-
-        # Update indices
-        pool_indices_to_add = [self.pool_indices[i] for i in selected_indices]
-        self.labeled_indices.extend(pool_indices_to_add)
-
-        # Remove from pool
-        remaining_indices = np.setdiff1d(range(len(self.X_pool)), selected_indices)
-        self.X_pool = self.X_pool[remaining_indices]
-        self.y_pool = self.y_pool[remaining_indices]
-        self.pool_indices = [self.pool_indices[i] for i in remaining_indices]
+        self._update_active_learning_sets()
 
         update_info = {
-            "samples_added": len(selected_indices),
-            "new_labeled_size": len(self.X_labeled),
-            "new_pool_size": len(self.X_pool),
-            "added_class_distribution": dict(
-                zip(*np.unique(selected_y, return_counts=True))
-            ),
-            "total_labeled_ratio": len(self.X_labeled) / len(self.X_train_full),
+            "samples_added": len(pool_indices_to_add),
+            "new_labeled_size": len(self.labeled_indices),
+            "new_pool_size": len(self.pool_indices),
+            "labeled_percentage": len(self.labeled_indices)
+            / len(self.X_train_full)
+            * 100,
         }
-
-        logger.info(f"Added {len(selected_indices)} samples to labeled set")
-        logger.info(f"  New labeled size: {len(self.X_labeled)}")
-        logger.info(f"  Remaining pool size: {len(self.X_pool)}")
-
         return update_info
 
     def get_next_pool_batch(self, batch_size: int) -> Tuple[np.ndarray, np.ndarray]:
-        """Get next batch from pool for uncertainty evaluation.
+        """Get next batch from pool for selection."""
+        if self.is_pool_empty():
+            return np.array([]), np.array([])
 
-        Args:
-            batch_size: Size of batch to return
-
-        Returns:
-            Tuple of (X_batch, y_batch) from pool
-        """
-        if self.X_pool is None or len(self.X_pool) == 0:
-            raise ValueError("Pool is empty or not initialized")
-
-        # Return up to batch_size samples from pool
         actual_batch_size = min(batch_size, len(self.X_pool))
-        return self.X_pool[:actual_batch_size], self.y_pool[:actual_batch_size]
+        batch_indices = np.arange(actual_batch_size)
+        return self.X_pool[batch_indices], self.y_pool[batch_indices]
 
     def get_labeled_data(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Get current labeled dataset.
-
-        Returns:
-            Tuple of (X_labeled, y_labeled)
-        """
+        """Get current labeled dataset."""
         if self.X_labeled is None:
             raise ValueError(
-                "Labeled set not initialized. Call initialize_active_learning() first."
+                "Active Learning not initialized. Call initialize_active_learning() first."
             )
-
         return self.X_labeled, self.y_labeled
 
     def get_pool_data(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Get current pool dataset.
-
-        Returns:
-            Tuple of (X_pool, y_pool)
-        """
+        """Get current pool dataset."""
         if self.X_pool is None:
             raise ValueError(
-                "Pool not initialized. Call initialize_active_learning() first."
+                "Active Learning not initialized. Call initialize_active_learning() first."
             )
-
         return self.X_pool, self.y_pool
 
     def is_pool_empty(self) -> bool:
-        """Check if pool is empty.
+        """Check if pool is empty."""
+        return len(self.pool_indices) == 0
 
-        Returns:
-            True if pool is empty, False otherwise
-        """
-        return self.X_pool is None or len(self.X_pool) == 0
+    def get_active_learning_stats(self) -> Dict[str, Any]:
+        """Get current Active Learning statistics."""
+        if not hasattr(self, "labeled_indices"):
+            return {"status": "not_initialized"}
+
+        return {
+            "labeled_samples": len(self.labeled_indices),
+            "pool_samples": len(self.pool_indices),
+            "total_train_samples": len(self.X_train_full),
+            "labeled_percentage": len(self.labeled_indices)
+            / len(self.X_train_full)
+            * 100,
+            "pool_percentage": len(self.pool_indices) / len(self.X_train_full) * 100,
+            "labeled_class_distribution": (
+                dict(zip(*np.unique(self.y_labeled, return_counts=True)))
+                if self.y_labeled is not None
+                else {}
+            ),
+        }
+
+    def reset_active_learning(self):
+        """Reset Active Learning state."""
+        self.X_labeled = None
+        self.y_labeled = None
+        self.X_pool = None
+        self.y_pool = None
+        self.labeled_indices = []
+        self.pool_indices = []
+
+    def get_dataset_info(self) -> Dict[str, Any]:
+        """Get comprehensive dataset information."""
+        if not self._is_loaded:
+            return {"status": "not_loaded"}
+
+        info = {
+            "dataset_name": "Digits",
+            "total_samples": len(self.X_train_full)
+            + len(self.X_val)
+            + len(self.X_test),
+            "train_samples": len(self.X_train_full),
+            "val_samples": len(self.X_val),
+            "test_samples": len(self.X_test),
+            "features": self.X_train_full.shape[1],
+            "classes": len(np.unique(self.y_train_full)),
+            "class_names": list(range(len(np.unique(self.y_train_full)))),
+        }
+
+        if hasattr(self, "labeled_indices"):
+            info.update(self.get_active_learning_stats())
+
+        return info
