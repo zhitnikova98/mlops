@@ -1,6 +1,6 @@
-# Step 4: Active Learning vs Full Dataset Comparison
+# Step 4: Independent Active Learning and Baseline Flows
 
-Этот шаг демонстрирует сравнение эффективности Active Learning с обучением на полном датасете.
+Этот шаг демонстрирует независимые flow для Active Learning и Baseline обучения с возможностью сравнения результатов.
 
 ## Основные возможности
 
@@ -10,17 +10,18 @@
 - 10 классов (цифры 0-9)
 - Более сложная задача по сравнению с Forest Cover Type
 
-### 🔄 **Active Learning Pipeline**
-- **Uncertainty Sampling**: 3 стратегии (entropy, margin, least confident)
-- **Incremental Learning**: Постепенное добавление данных
-- **MLflow Tracking**: Отслеживание всех экспериментов
+### 🔄 **Independent Flow Architecture**
+- **Active Learning Flow**: Инкрементальное обучение с uncertainty sampling
+- **Baseline Flow**: Обучение на полном датасете
+- **Independent Execution**: Каждый flow запускается отдельно
+- **MLflow Tracking**: Отдельные эксперименты для каждого flow
 - **Prefect Orchestration**: Управление workflow
 
-### 📊 **Baseline Comparison**
-- **Full Dataset Training**: Обучение на всем доступном датасете
-- **Performance Metrics**: Сравнение accuracy, F1-score
-- **Data Efficiency**: Анализ количества данных vs качество модели
-- **Learning Curves**: Визуализация процесса обучения
+### 📊 **Active Learning Features**
+- **Uncertainty Sampling**: 3 стратегии (entropy, margin, least confident)
+- **Incremental Steps**: 5% данных на каждой итерации
+- **Data Efficiency**: Достижение лучшего качества с меньшими данными
+- **15 Iterations**: Постепенное добавление данных до 74.4%
 
 ## Архитектура
 
@@ -32,8 +33,8 @@ step4/
 │   ├── active_learning.py       # AL стратегии
 │   └── baseline_trainer.py      # NEW: Обучение на полном датасете
 ├── flows/
-│   ├── active_learning_flow.py  # AL Prefect flow
-│   └── comparison_flow.py       # NEW: Сравнение AL vs Baseline
+│   ├── active_learning_flow.py  # AL Prefect flow (инкрементальное обучение)
+│   └── baseline_flow.py         # Baseline Prefect flow (полный датасет)
 ├── pyproject.toml              # Poetry конфигурация
 ├── Makefile                    # Автоматизация
 └── README.md                   # Документация
@@ -49,19 +50,24 @@ make install
 # Запуск сервисов
 make start-services
 
-# Сравнение AL vs Baseline
-make compare-all
+# Запуск обоих flow
+make run-both
 ```
 
 ### 🔬 **Отдельные эксперименты**
 ```bash
-# Только Active Learning (entropy)
-make run-al-entropy
-
 # Только Baseline (полный датасет)
 make run-baseline
 
-# Сравнение всех стратегий
+# Только Active Learning (entropy)
+make run-al
+
+# Active Learning с разными стратегиями
+make run-al-entropy
+make run-al-margin
+make run-al-confident
+
+# Бенчмарк всех стратегий
 make benchmark
 ```
 
@@ -76,22 +82,27 @@ make prefect-server
 # Откройте http://localhost:4200
 ```
 
-## Ожидаемые результаты
+## Результаты экспериментов
 
-### 🎯 **Active Learning**
-- **Эффективность данных**: Достижение 85-90% качества с 30-50% данных
-- **Uncertainty Sampling**: Entropy обычно показывает лучшие результаты
-- **Convergence**: Быстрая сходимость на первых итерациях
+### 🔵 **Baseline Results (100% данных)**
+- **Test Accuracy**: 96.67%
+- **Val Accuracy**: 98.61%
+- **Training Samples**: 1149 (100% данных)
+- **MLflow Experiment**: `step4_baseline`
 
-### 📊 **Baseline (Full Dataset)**
-- **Maximum Performance**: Верхняя граница качества модели
-- **Data Utilization**: 100% использование данных
-- **Reference Point**: Эталон для сравнения AL стратегий
+### 🟢 **Active Learning Results (74.4% данных)**
+- **Test Accuracy**: 97.78% (**+1.11% лучше!**)
+- **Val Accuracy**: 98.96% (**+0.35% лучше!**)
+- **Training Samples**: 855 (74.4% данных, экономия 25.6%)
+- **Iterations**: 15 (по 5% данных каждая)
+- **Strategies**: entropy и margin показывают одинаковые результаты
+- **MLflow Experiment**: `step4_active_learning`
 
-### 🔍 **Сравнение**
-- **Data Efficiency**: AL достигает 90% качества baseline с 40-60% данных
-- **Training Speed**: AL быстрее на ранних стадиях
-- **Practical Value**: AL особенно эффективен при ограниченных ресурсах разметки
+### 🏆 **Ключевые выводы**
+- **Data Efficiency**: AL достигает лучшего качества с меньшими данными
+- **Performance**: +1.11% улучшение accuracy при экономии 25.6% данных
+- **Incremental Learning**: 5% шаги показывают эффективность
+- **Uncertainty Sampling**: entropy и margin стратегии одинаково эффективны
 
 ## Команды Makefile
 
@@ -103,7 +114,7 @@ make prefect-server
 | `make run-al-margin` | AL с margin sampling |
 | `make run-al-confident` | AL с least confident sampling |
 | `make run-baseline` | Обучение на полном датасете |
-| `make compare-all` | Полное сравнение всех методов |
+| `make run-both` | Запуск обоих flow (baseline + AL) |
 | `make benchmark` | Бенчмарк всех AL стратегий |
 | `make clean` | Очистка артефактов |
 | `make stop-services` | Остановка сервисов |
@@ -124,7 +135,8 @@ make prefect-server
 - **Artifacts**: Модели, confusion matrices, learning curves
 
 ### 🎛️ **Настройки**
-- **Initial Labeled**: 10% от training set
-- **Batch Size**: 10% от remaining pool
-- **Max Iterations**: 10 (до исчерпания pool)
+- **Initial Labeled**: 5% от training set
+- **Increment Size**: 5% от training set на каждой итерации
+- **Max Iterations**: 15 (до достижения 74.4% данных)
 - **Random Seed**: 42 (воспроизводимость)
+- **Independent Flows**: Baseline и AL запускаются отдельно
