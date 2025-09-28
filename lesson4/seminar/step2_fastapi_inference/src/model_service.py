@@ -27,11 +27,9 @@ class ONNXImageCaptionService:
 
         print(f"Загрузка ONNX модели из {self.onnx_path}")
 
-        # Создание сессии ONNX Runtime для CPU
         providers = ["CPUExecutionProvider"]
         self.session = ort.InferenceSession(self.onnx_path, providers=providers)
 
-        # Загрузка процессора для предобработки
         self.processor = BlipProcessor.from_pretrained(self.model_name)
 
         self.loaded = True
@@ -39,17 +37,14 @@ class ONNXImageCaptionService:
 
     def preprocess_image(self, image: Image.Image) -> dict:
         """Предобработка изображения для ONNX модели"""
-        # Конвертация в RGB если нужно
+
         if image.mode != "RGB":
             image = image.convert("RGB")
 
-        # Предобработка через процессор BLIP
         inputs = self.processor(image, return_tensors="pt")
 
-        # Подготовка входов для ONNX (правильные размеры и типы)
         image_input = inputs.pixel_values.numpy()
 
-        # Правильный token_id для BLIP
         token_id = getattr(self.processor.tokenizer, "bos_token_id", None)
         if token_id is None:
             token_id = getattr(self.processor.tokenizer, "cls_token_id", 101)
@@ -73,15 +68,13 @@ class ONNXImageCaptionService:
 
         start_time = time.time()
 
-        # Предобработка
         preprocess_start = time.time()
         onnx_inputs = self.preprocess_image(image)
         preprocess_time = time.time() - preprocess_start
 
-        # ONNX Инференс с итеративной генерацией
         inference_start = time.time()
         try:
-            # Итеративная генерация как в эксперименте
+
             caption = self._iterative_generation(onnx_inputs["image"], max_tokens=10)
             inference_time = time.time() - inference_start
 
@@ -135,7 +128,6 @@ class ONNXImageCaptionService:
 
         batch_time = time.time() - batch_start
 
-        # Статистика батча
         successful_requests = sum(1 for r in results if r.get("success", False))
 
         batch_stats = {
@@ -157,7 +149,7 @@ class ONNXImageCaptionService:
         """
         Итеративная генерация текста с ONNX моделью
         """
-        # Начальная последовательность токенов
+
         token_id = getattr(self.processor.tokenizer, "bos_token_id", None)
         if token_id is None:
             token_id = getattr(self.processor.tokenizer, "cls_token_id", 101)
@@ -166,7 +158,7 @@ class ONNXImageCaptionService:
         generated_tokens = []
 
         for step in range(max_tokens):
-            # Подготавливаем input_ids текущей длины (заполняем до 16)
+
             if len(current_tokens) < 16:
                 input_ids = current_tokens + [token_id] * (16 - len(current_tokens))
             else:
@@ -174,20 +166,17 @@ class ONNXImageCaptionService:
 
             input_ids_array = np.array([input_ids], dtype=np.int64)
 
-            # ONNX инференс
             onnx_inputs = {"image": image_input, "input_ids": input_ids_array}
 
             try:
                 outputs = self.session.run(None, onnx_inputs)
-                logits = outputs[0]  # [1, 16, 30524]
+                logits = outputs[0]
 
-                # Берем логиты для нужной позиции
                 pos = len(current_tokens) - 1 if len(current_tokens) <= 16 else 15
                 last_token_logits = logits[0, pos, :]
                 predicted_id = int(np.argmax(last_token_logits))
 
-                # Проверяем условия остановки
-                if predicted_id == 102:  # [SEP] token
+                if predicted_id == 102:
                     break
 
                 current_tokens.append(predicted_id)
@@ -196,7 +185,6 @@ class ONNXImageCaptionService:
             except Exception:
                 break
 
-        # Декодируем полную последовательность
         if generated_tokens:
             try:
                 return self.processor.tokenizer.decode(

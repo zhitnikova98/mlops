@@ -25,7 +25,6 @@ class MLflowTracker:
         if tracking_uri:
             mlflow.set_tracking_uri(tracking_uri)
 
-        # Set or create experiment
         try:
             experiment = mlflow.get_experiment_by_name(experiment_name)
             if experiment is None:
@@ -143,7 +142,6 @@ class MLflowTracker:
         }
 
         with self.start_run(run_name=run_name, tags=tags) as run:
-            # Log parameters
             params = {
                 "iteration": iteration,
                 "train_size": train_size,
@@ -152,7 +150,6 @@ class MLflowTracker:
             }
             self.log_params(params)
 
-            # Log validation metrics
             val_metrics_prefixed = {
                 f"val_{k}": v
                 for k, v in val_metrics.items()
@@ -160,7 +157,6 @@ class MLflowTracker:
             }
             self.log_metrics(val_metrics_prefixed, step=iteration)
 
-            # Log test metrics
             test_metrics_prefixed = {
                 f"test_{k}": v
                 for k, v in test_metrics.items()
@@ -168,7 +164,6 @@ class MLflowTracker:
             }
             self.log_metrics(test_metrics_prefixed, step=iteration)
 
-            # Log model if provided
             if model is not None:
                 self.log_model(model, f"model_iter_{iteration:02d}")
 

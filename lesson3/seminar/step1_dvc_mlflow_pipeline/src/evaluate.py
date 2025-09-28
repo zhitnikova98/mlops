@@ -26,13 +26,11 @@ def evaluate_model(batch_number: int):
     """
     params = load_params()
 
-    # Загружаем данные
     df = pd.read_csv(f"data/processed/dataset_processed_v{batch_number}.csv")
 
     X = df[["total_bill", "size"]]
     y = df["high_tip"]
 
-    # Разделение на train/test (такое же как при обучении)
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
@@ -40,21 +38,16 @@ def evaluate_model(batch_number: int):
         random_state=params["model"]["seed"],
     )
 
-    # Загружаем модель
     with open(f"models/model_v{batch_number}.pkl", "rb") as f:
         model = pickle.load(f)
 
-    # Предсказания
     y_pred = model.predict(X_test)
 
-    # Метрики
     accuracy = accuracy_score(y_test, y_pred)
     f1 = f1_score(y_test, y_pred, average="weighted")
 
-    # Детальный отчет
     report = classification_report(y_test, y_pred, output_dict=True)
 
-    # Сохраняем метрики тестирования
     test_metrics = {
         "test_accuracy": accuracy,
         "test_f1_score": f1,

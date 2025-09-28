@@ -43,25 +43,18 @@ class UncertaintySampler:
 
     def _entropy_uncertainty(self, probabilities: np.ndarray) -> np.ndarray:
         """Calculate entropy-based uncertainty."""
-        # Add small epsilon to avoid log(0)
         eps = 1e-10
         probabilities = np.clip(probabilities, eps, 1 - eps)
 
-        # Calculate entropy: -sum(p * log(p))
         entropy = -np.sum(probabilities * np.log(probabilities), axis=1)
         return entropy
 
     def _margin_uncertainty(self, probabilities: np.ndarray) -> np.ndarray:
         """Calculate margin-based uncertainty (difference between top 2 predictions)."""
-        # Sort probabilities in descending order
         sorted_probs = np.sort(probabilities, axis=1)[:, ::-1]
 
-        # Margin is the difference between highest and second highest probability
-        # Higher margin = more confident, so we return negative margin for uncertainty
         margin = sorted_probs[:, 0] - sorted_probs[:, 1]
-        return (
-            -margin
-        )  # Negative because we want higher values for more uncertain samples
+        return -margin
 
     def _least_confident_uncertainty(self, probabilities: np.ndarray) -> np.ndarray:
         """Calculate least confident uncertainty (1 - max probability)."""
@@ -90,19 +83,15 @@ class UncertaintySampler:
             f"Selecting {n_samples} samples using {self.strategy} uncertainty sampling..."
         )
 
-        # Get prediction probabilities
         probabilities = model.predict_proba(X_pool)
 
-        # Calculate uncertainty scores
         uncertainty_scores = self.calculate_uncertainty(probabilities)
 
-        # Select top uncertain samples
         uncertain_indices = np.argsort(uncertainty_scores)[::-1][:n_samples]
 
         selected_X = X_pool[uncertain_indices]
         selected_y = y_pool[uncertain_indices]
 
-        # Log statistics
         mean_uncertainty = np.mean(uncertainty_scores[uncertain_indices])
         logger.info(f"Selected samples with mean uncertainty: {mean_uncertainty:.4f}")
 
@@ -157,15 +146,12 @@ class ActiveLearningManager:
         Returns:
             Dictionary with selection quality metrics
         """
-        # Calculate class distribution in selection
         unique_classes, counts = np.unique(selected_y, return_counts=True)
         selection_dist = dict(zip(unique_classes, counts))
 
-        # Calculate class distribution in pool
         pool_unique, pool_counts = np.unique(y_pool, return_counts=True)
         pool_dist = dict(zip(pool_unique, pool_counts))
 
-        # Calculate diversity (number of unique classes selected)
         diversity = len(unique_classes)
 
         metrics = {
@@ -209,14 +195,12 @@ class ActiveLearningManager:
         if not self.training_history:
             return {"status": "no_training_history"}
 
-        # Extract metrics from history
         iterations = [entry["iteration"] for entry in self.training_history]
         val_accuracies = [
             entry.get("val_accuracy", 0) for entry in self.training_history
         ]
         train_sizes = [entry.get("train_size", 0) for entry in self.training_history]
 
-        # Find best iteration
         best_val_idx = np.argmax(val_accuracies)
         best_iteration = self.training_history[best_val_idx]
 

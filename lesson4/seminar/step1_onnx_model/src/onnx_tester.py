@@ -22,11 +22,9 @@ class ONNXModelTester:
         """Загрузка ONNX модели"""
         print(f"Загрузка ONNX модели из {self.onnx_path}")
 
-        # Создание сессии ONNX Runtime
         providers = ["CPUExecutionProvider"]
         self.session = ort.InferenceSession(self.onnx_path, providers=providers)
 
-        # Загрузка процессора для предобработки
         self.processor = BlipProcessor.from_pretrained(self.model_name)
 
         print("ONNX модель загружена успешно")
@@ -38,36 +36,28 @@ class ONNXModelTester:
                 "ONNX модель не загружена. Вызовите load_onnx_model() сначала."
             )
 
-        # Загрузка тестового изображения
         if image_url is None:
             image_url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
 
         print(f"Тестирование ONNX модели на изображении: {image_url}")
         raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
 
-        # Предобработка изображения
         inputs = self.processor(raw_image, return_tensors="pt")
 
-        # Подготовка входов для ONNX
         image_input = inputs.pixel_values.numpy()
 
-        # ONNX модель ожидает input_ids размером [batch_size, 16]
-        # BLIP tokenizer может не иметь bos_token_id, используем cls_token_id или 101
         bos_id = getattr(self.processor.tokenizer, "bos_token_id", None)
         if bos_id is None:
-            bos_id = getattr(
-                self.processor.tokenizer, "cls_token_id", 101
-            )  # 101 - стандартный CLS для BERT-like моделей
+            bos_id = getattr(self.processor.tokenizer, "cls_token_id", 101)
 
         print(f"Используем token_id: {bos_id}")
-        # Создаем последовательность из 16 токенов
+
         input_ids = np.array([[bos_id] * 16], dtype=np.int64)
 
         print("Подготовленные входы для ONNX:")
         print(f"  - image: {image_input.shape} {image_input.dtype}")
         print(f"  - input_ids: {input_ids.shape} {input_ids.dtype}")
 
-        # Запуск инференса с правильными именами входов
         ort_inputs = {"image": image_input, "input_ids": input_ids}
 
         print("Запуск ONNX инференса...")
@@ -75,21 +65,17 @@ class ONNXModelTester:
             ort_outputs = self.session.run(None, ort_inputs)
             print("✅ ONNX инференс завершен успешно!")
 
-            # Анализ выходов
             print(f"Количество выходов: {len(ort_outputs)}")
             for i, output in enumerate(ort_outputs):
                 print(f"  Выход {i}: {output.shape} {output.dtype}")
 
-            # Первый выход - это логиты для генерации текста
             logits = ort_outputs[0]
 
-            # Декодируем только если размер разумный
-            if len(logits.shape) == 3 and logits.shape[2] == 30524:  # vocabulary size
-                # Берем последний токен из последовательности
+            if len(logits.shape) == 3 and logits.shape[2] == 30524:
+
                 last_token_logits = logits[0, -1, :]
                 predicted_id = np.argmax(last_token_logits)
 
-                # Попробуем декодировать
                 try:
                     token = self.processor.tokenizer.decode([predicted_id])
                     print(f"Предсказанный токен: '{token}' (ID: {predicted_id})")
@@ -112,10 +98,8 @@ class ONNXModelTester:
         if self.session is None:
             raise ValueError("ONNX модель не загружена.")
 
-        # Подготовка данных для бенчмарка (используем те же правильные размеры)
         dummy_image = np.random.randn(1, 3, 384, 384).astype(np.float32)
 
-        # Используем тот же token_id что и в test_inference
         token_id = getattr(self.processor.tokenizer, "bos_token_id", None)
         if token_id is None:
             token_id = getattr(self.processor.tokenizer, "cls_token_id", 101)
@@ -126,24 +110,21 @@ class ONNXModelTester:
 
         print(f"Запуск бенчмарка ({num_runs} итераций)...")
 
-        # Разогрев
         for _ in range(10):
             self.session.run(None, ort_inputs)
 
-        # Основной бенчмарк
         latencies = []
         for i in range(num_runs):
             start_time = time.time()
             self.session.run(None, ort_inputs)
             end_time = time.time()
 
-            latency = (end_time - start_time) * 1000  # в миллисекундах
+            latency = (end_time - start_time) * 1000
             latencies.append(latency)
 
             if (i + 1) % 20 == 0:
                 print(f"Завершено {i + 1}/{num_runs} итераций")
 
-        # Статистика
         avg_latency = np.mean(latencies)
         p50_latency = np.percentile(latencies, 50)
         p95_latency = np.percentile(latencies, 95)
@@ -170,13 +151,10 @@ def main():
 
     tester = ONNXModelTester(onnx_path)
 
-    # Загрузка и тестирование модели
     tester.load_onnx_model()
 
-    # Тест инференса
     tester.test_inference()
 
-    # Бенчмарк производительности
     tester.benchmark_performance(num_runs=50)
 
     print("\nТестирование ONNX модели завершено!")

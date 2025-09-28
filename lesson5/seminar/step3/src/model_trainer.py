@@ -69,15 +69,12 @@ class ModelTrainer:
 
         logger.info(f"Evaluating model on {dataset_name} ({len(X)} samples)...")
 
-        # Make predictions
         y_pred = self.model.predict(X)
 
-        # Calculate metrics
         accuracy = accuracy_score(y, y_pred)
         f1_macro = f1_score(y, y_pred, average="macro")
         f1_weighted = f1_score(y, y_pred, average="weighted")
 
-        # Generate classification report
         class_report = classification_report(y, y_pred)
 
         metrics = {
@@ -105,7 +102,6 @@ class ModelTrainer:
         if self.model is None:
             raise ValueError("Model not trained. Call train_model() first.")
 
-        # Ensure directory exists
         Path(filepath).parent.mkdir(parents=True, exist_ok=True)
 
         self.model.save_model(filepath)
@@ -151,10 +147,8 @@ class ModelTrainer:
             metrics: Metrics dictionary
             filepath: Path to save metrics
         """
-        # Ensure directory exists
         Path(filepath).parent.mkdir(parents=True, exist_ok=True)
 
-        # Remove classification_report for JSON serialization
         metrics_to_save = {
             k: v for k, v in metrics.items() if k != "classification_report"
         }
@@ -162,7 +156,6 @@ class ModelTrainer:
         with open(filepath, "w") as f:
             json.dump(metrics_to_save, f, indent=2)
 
-        # Save classification report separately
         if "classification_report" in metrics:
             report_filepath = filepath.replace(".json", "_report.txt")
             with open(report_filepath, "w") as f:

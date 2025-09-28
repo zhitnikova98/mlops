@@ -30,7 +30,6 @@ def load_and_prepare_data():
     """Load Forest Cover Type dataset and prepare train/test splits."""
     print("Loading Forest Cover Type dataset...")
 
-    # Load the dataset
     covtype = fetch_covtype()
     X, y = covtype.data, covtype.target
 
@@ -38,12 +37,10 @@ def load_and_prepare_data():
     print(f"Number of classes: {len(np.unique(y))}")
     print(f"Classes: {np.unique(y)}")
 
-    # Split into train and test with seed=42
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    # Take only first 10% of train data
     n_samples = int(0.1 * len(X_train))
     X_train_small = X_train[:n_samples]
     y_train_small = y_train[:n_samples]
@@ -70,7 +67,6 @@ def train_model(X_train, y_train):
 
     model.fit(X_train, y_train)
 
-    # Save the model
     model.save_model("models/catboost_model.cbm")
     print("Model saved to models/catboost_model.cbm")
 
@@ -81,18 +77,14 @@ def evaluate_model(model, X_test, y_test):
     """Evaluate model and save metrics."""
     print("Evaluating model...")
 
-    # Make predictions
     y_pred = model.predict(X_test)
 
-    # Calculate metrics
     accuracy = accuracy_score(y_test, y_pred)
     f1_macro = f1_score(y_test, y_pred, average="macro")
     f1_weighted = f1_score(y_test, y_pred, average="weighted")
 
-    # Generate classification report
     class_report = classification_report(y_test, y_pred)
 
-    # Prepare metrics dictionary
     metrics = {
         "accuracy": float(accuracy),
         "f1_macro": float(f1_macro),
@@ -100,11 +92,9 @@ def evaluate_model(model, X_test, y_test):
         "test_samples": len(y_test),
     }
 
-    # Save metrics as JSON
     with open("metrics/metrics.json", "w") as f:
         json.dump(metrics, f, indent=2)
 
-    # Save detailed classification report
     with open("metrics/classification_report.txt", "w") as f:
         f.write("Classification Report\\n")
         f.write("=" * 50 + "\\n")
@@ -123,16 +113,12 @@ def main():
     print("Starting Step 1: Basic Model Training")
     print("=" * 50)
 
-    # Create output directories
     create_directories()
 
-    # Load and prepare data
     X_train, X_test, y_train, y_test = load_and_prepare_data()
 
-    # Train model
     model = train_model(X_train, y_train)
 
-    # Evaluate model
     metrics = evaluate_model(model, X_test, y_test)
 
     print("\\nTraining completed successfully!")

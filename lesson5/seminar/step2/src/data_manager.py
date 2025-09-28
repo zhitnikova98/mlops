@@ -35,19 +35,16 @@ class DataManager:
         """
         logger.info("Loading Forest Cover Type dataset...")
 
-        # Load the dataset
         covtype = fetch_covtype()
         X, y = covtype.data, covtype.target
 
         logger.info(f"Dataset shape: {X.shape}")
         logger.info(f"Number of classes: {len(np.unique(y))}")
 
-        # First split: separate test set (20%)
         X_temp, self.X_test, y_temp, self.y_test = train_test_split(
             X, y, test_size=0.2, random_state=self.random_seed, stratify=y
         )
 
-        # Second split: separate validation set (20% of remaining = 16% of total)
         self.X_train_full, self.X_val, self.y_train_full, self.y_val = train_test_split(
             X_temp,
             y_temp,
@@ -94,7 +91,6 @@ class DataManager:
 
         n_samples = int(percentage * len(self.X_train_full))
 
-        # Take first n_samples to ensure consistent incremental growth
         X_train_subset = self.X_train_full[:n_samples]
         y_train_subset = self.y_train_full[:n_samples]
 

@@ -13,7 +13,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Глобальная переменная для сервиса модели
+
 model_service: ONNXImageCaptionService = None
 
 
@@ -22,7 +22,6 @@ async def startup_event():
     """Инициализация при запуске сервиса"""
     global model_service
 
-    # Путь к ONNX модели
     onnx_path = "models/blip_model.onnx"
 
     if not os.path.exists(onnx_path):
@@ -90,10 +89,9 @@ async def predict_single(file: UploadFile = File(...)):
         raise HTTPException(status_code=503, detail="Модель не загружена")
 
     try:
-        # Валидация и загрузка изображения
+
         image = validate_image(file)
 
-        # Выполнение инференса
         result = model_service.predict(image)
 
         return {
@@ -126,7 +124,7 @@ async def predict_batch(files: List[UploadFile] = File(...)):
         raise HTTPException(status_code=400, detail="Максимум 10 изображений за раз")
 
     try:
-        # Загрузка всех изображений
+
         images = []
         filenames = []
 
@@ -135,10 +133,8 @@ async def predict_batch(files: List[UploadFile] = File(...)):
             images.append(image)
             filenames.append(file.filename)
 
-        # Batch инференс
         results, batch_stats = model_service.predict_batch(images)
 
-        # Добавление информации о файлах к результатам
         for i, result in enumerate(results):
             result["filename"] = filenames[i]
             result["image_size"] = list(images[i].size)

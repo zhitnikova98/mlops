@@ -10,7 +10,6 @@ def test_onnx_api():
 
     print("🧪 Тестирование ONNX FastAPI с реальным изображением\n")
 
-    # 1. Health check
     print("1. Health Check:")
     try:
         response = requests.get(f"{base_url}/health", timeout=10)
@@ -27,7 +26,6 @@ def test_onnx_api():
         print("Убедитесь что FastAPI сервис запущен: python main.py")
         return
 
-    # 2. Тест с изображением
     print("\n2. Тест инференса с изображением:")
     image_path = "test_images/img.jpg"
 
@@ -41,7 +39,7 @@ def test_onnx_api():
             response = requests.post(f"{base_url}/predict", files=files, timeout=60)
 
             end_time = time.time()
-            request_time = (end_time - start_time) * 1000  # ms
+            request_time = (end_time - start_time) * 1000
 
             print(f"HTTP Response: {response.status_code}")
             print(f"Request time: {request_time:.2f} ms")

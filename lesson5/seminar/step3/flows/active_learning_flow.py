@@ -7,7 +7,6 @@ import os
 import logging
 from pathlib import Path
 
-# Add src to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from prefect import flow, task
@@ -16,7 +15,6 @@ from model_trainer import ModelTrainer
 from mlflow_tracker import MLflowTracker
 from active_learning import ActiveLearningManager
 
-# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -83,37 +81,29 @@ def train_al_model_iteration(
     """Train model for Active Learning iteration."""
     print(f"Training Active Learning iteration {iteration}...")
 
-    # Get current labeled data
     X_labeled, y_labeled = data_manager.get_labeled_data()
     X_val, y_val = data_manager.get_validation_data()
     X_test, y_test = data_manager.get_test_data()
 
-    # Initialize model trainer
     trainer = ModelTrainer()
 
-    # Train model on current labeled set
     model = trainer.train_model(X_labeled, y_labeled)
 
-    # Evaluate on validation and test sets
     val_metrics = trainer.evaluate_model(X_val, y_val, "validation")
     test_metrics = trainer.evaluate_model(X_test, y_test, "test")
 
-    # Save model
     model_path = f"models/catboost_model_al_iter_{iteration:02d}.cbm"
     trainer.save_model(model_path)
 
-    # Save metrics
     metrics_dir = Path("metrics") / f"al_iteration_{iteration:02d}"
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
     trainer.save_metrics(val_metrics, str(metrics_dir / "val_metrics.json"))
     trainer.save_metrics(test_metrics, str(metrics_dir / "test_metrics.json"))
 
-    # Calculate labeled data percentage
     data_info = data_manager.get_data_info()
     labeled_percentage = data_info.get("total_labeled_ratio", 0) * 100
 
-    # Log to MLflow
     run_id = tracker.log_training_iteration(
         iteration=iteration,
         train_size=len(X_labeled),
@@ -134,10 +124,9 @@ def train_al_model_iteration(
         "test_f1_macro": test_metrics["f1_macro"],
         "model_path": model_path,
         "mlflow_run_id": run_id,
-        "model": model,  # Pass model for next iteration
+        "model": model,
     }
 
-    # Update AL manager history
     al_manager.update_training_history(iteration, result)
 
     print(f"Iteration {iteration} completed:")
@@ -158,26 +147,20 @@ def select_next_al_batch(
     """Select next batch of samples using Active Learning."""
     print(f"Selecting next batch of {batch_size} samples...")
 
-    # Check if pool is empty
     if data_manager.is_pool_empty():
         print("Pool is empty, no more samples to select")
         return {"samples_selected": 0, "pool_empty": True}
 
-    # Get current pool data
     X_pool, y_pool = data_manager.get_pool_data()
 
-    # Limit batch size to available pool samples
     actual_batch_size = min(batch_size, len(X_pool))
 
-    # Select uncertain samples
     selected_X, selected_y, selected_indices = al_manager.select_next_batch(
         X_pool, y_pool, model, actual_batch_size
     )
 
-    # Evaluate selection quality
     selection_quality = al_manager.evaluate_selection_quality(selected_y, y_pool)
 
-    # Add selected samples to labeled set
     update_info = data_manager.add_samples_to_labeled_set(selected_indices)
 
     result = {
@@ -217,32 +200,26 @@ def active_learning_pipeline(
     print(f"Uncertainty strategy: {uncertainty_strategy}")
     print("=" * 60)
 
-    # Initialize components
     data_manager = initialize_al_data_manager()
     al_manager = initialize_al_manager(uncertainty_strategy)
     tracker = initialize_mlflow_tracker()
 
-    # Create output directories
     Path("models").mkdir(exist_ok=True)
     Path("metrics").mkdir(exist_ok=True)
 
-    # Setup initial Active Learning state
     init_info = setup_initial_active_learning(data_manager, initial_percentage)
 
-    # Calculate dynamic batch size based on pool size
     if batch_size <= 0:
         batch_size = max(1000, int(0.1 * init_info["initial_pool_size"]))
 
     print(f"Using batch size: {batch_size}")
 
-    # Run Active Learning iterations
     results = []
     current_model = None
 
     for iteration in range(1, max_iterations + 1):
         print(f"\n--- Active Learning Iteration {iteration} ---")
 
-        # Train model on current labeled set
         train_result = train_al_model_iteration(
             data_manager=data_manager,
             al_manager=al_manager,
@@ -254,9 +231,7 @@ def active_learning_pipeline(
         results.append(train_result)
         current_model = train_result["model"]
 
-        # Check if we should continue
         if iteration < max_iterations:
-            # Select next batch using uncertainty sampling
             selection_result = select_next_al_batch(
                 data_manager=data_manager,
                 al_manager=al_manager,
@@ -264,17 +239,14 @@ def active_learning_pipeline(
                 batch_size=batch_size,
             )
 
-            # Stop if pool is empty
             if selection_result["pool_empty"]:
                 print(f"Pool exhausted at iteration {iteration}")
                 break
 
-            # Stop if no samples were selected
             if selection_result["samples_selected"] == 0:
                 print(f"No samples selected at iteration {iteration}")
                 break
 
-    # Summary
     print("\n" + "=" * 60)
     print("ACTIVE LEARNING SUMMARY")
     print("=" * 60)
@@ -287,14 +259,12 @@ def active_learning_pipeline(
             f"Test Acc: {result['test_accuracy']:.4f}"
         )
 
-    # Find best iteration based on validation accuracy
     best_result = max(results, key=lambda x: x["val_accuracy"])
     print(
         f"\nBest iteration: {best_result['iteration']} "
         f"(Val Acc: {best_result['val_accuracy']:.4f})"
     )
 
-    # Get training summary from AL manager
     training_summary = al_manager.get_training_summary()
 
     print("\nActive Learning completed!")
@@ -332,19 +302,15 @@ def single_al_iteration_pipeline(
         f"Running single AL iteration {iteration} with {initial_percentage*100:.0f}% initial data"
     )
 
-    # Initialize components
     data_manager = initialize_al_data_manager()
     al_manager = initialize_al_manager(uncertainty_strategy)
     tracker = initialize_mlflow_tracker()
 
-    # Create output directories
     Path("models").mkdir(exist_ok=True)
     Path("metrics").mkdir(exist_ok=True)
 
-    # Setup initial Active Learning state
     setup_initial_active_learning(data_manager, initial_percentage)
 
-    # Run single iteration
     result = train_al_model_iteration(
         data_manager=data_manager,
         al_manager=al_manager,
@@ -357,21 +323,17 @@ def single_al_iteration_pipeline(
 
 
 if __name__ == "__main__":
-    # Parse command line arguments
     if len(sys.argv) > 1:
         if sys.argv[1] == "single":
-            # Run single iteration
             iteration = int(sys.argv[2]) if len(sys.argv) > 2 else 1
             initial_pct = float(sys.argv[3]) if len(sys.argv) > 3 else 0.1
             strategy = sys.argv[4] if len(sys.argv) > 4 else "entropy"
             single_al_iteration_pipeline(iteration, initial_pct, strategy)
         else:
-            # Run full pipeline with custom iterations
             max_iters = int(sys.argv[1])
             strategy = sys.argv[2] if len(sys.argv) > 2 else "entropy"
             active_learning_pipeline(
                 max_iterations=max_iters, uncertainty_strategy=strategy
             )
     else:
-        # Run full pipeline with default settings
         active_learning_pipeline()

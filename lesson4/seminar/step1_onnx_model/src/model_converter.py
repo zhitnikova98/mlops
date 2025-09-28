@@ -28,13 +28,10 @@ class BlipONNXConverter:
         if self.model is None:
             raise ValueError("Модель не загружена. Вызовите load_model() сначала.")
 
-        # Создание папки для модели
         Path(onnx_path).parent.mkdir(parents=True, exist_ok=True)
 
-        # Создание dummy input для трассировки
         dummy_image = torch.randn(1, 3, 384, 384)
 
-        # Правильный token_id для BLIP
         token_id = getattr(self.processor.tokenizer, "bos_token_id", None)
         if token_id is None:
             token_id = getattr(self.processor.tokenizer, "cls_token_id", 101)
@@ -43,7 +40,6 @@ class BlipONNXConverter:
 
         print("Конвертация в ONNX...")
 
-        # Экспорт в ONNX
         torch.onnx.export(
             self.model,
             (dummy_image, dummy_input_ids),
@@ -62,7 +58,6 @@ class BlipONNXConverter:
 
         print(f"Модель сохранена в {onnx_path}")
 
-        # Проверка модели
         onnx_model = onnx.load(onnx_path)
         onnx.checker.check_model(onnx_model)
         print("ONNX модель прошла проверку")
@@ -74,17 +69,14 @@ class BlipONNXConverter:
         if self.model is None or self.processor is None:
             raise ValueError("Модель не загружена. Вызовите load_model() сначала.")
 
-        # Загрузка тестового изображения
         if image_url is None:
             image_url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
 
         print(f"Загрузка изображения: {image_url}")
         raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
 
-        # Предобработка
         inputs = self.processor(raw_image, return_tensors="pt")
 
-        # Генерация caption
         with torch.no_grad():
             out = self.model.generate(**inputs, max_length=50)
 
@@ -98,13 +90,10 @@ def main():
     """Основная функция для конвертации и тестирования модели"""
     converter = BlipONNXConverter()
 
-    # Загрузка модели
     converter.load_model()
 
-    # Тестирование PyTorch модели
     converter.test_pytorch_model()
 
-    # Конвертация в ONNX
     onnx_path = converter.convert_to_onnx()
 
     print("\nКонвертация завершена успешно!")

@@ -39,9 +39,9 @@ class BatchOptimizer:
 
     def prepare_dummy_batch(self, batch_size: int) -> dict:
         """Подготовка dummy батча для тестирования"""
-        # Создание фиктивных входных данных (соответствуют экспорту ONNX)
+
         dummy_images = np.random.randn(batch_size, 3, 384, 384).astype(np.float32)
-        # ONNX модель ожидает input_ids размером 16
+
         dummy_input_ids = np.array(
             [[30522] * 16 for _ in range(batch_size)], dtype=np.int64
         )
@@ -64,36 +64,31 @@ class BatchOptimizer:
 
         print(f"Тестирование batch_size={batch_size}, итераций={num_iterations}")
 
-        # Подготовка данных
         batch_data = self.prepare_dummy_batch(batch_size)
 
-        # Разогрев модели
         for _ in range(5):
             try:
                 self.session.run(None, batch_data)
             except Exception as e:
                 return {"batch_size": batch_size, "error": str(e), "success": False}
 
-        # Основной бенчмарк
         latencies = []
         memory_usage = []
 
         for i in range(num_iterations):
-            # Замер памяти до инференса
-            process = psutil.Process()
-            memory_before = process.memory_info().rss / 1024 / 1024  # MB
 
-            # Инференс
+            process = psutil.Process()
+            memory_before = process.memory_info().rss / 1024 / 1024
+
             start_time = time.time()
             try:
                 self.session.run(None, batch_data)
                 end_time = time.time()
 
-                latency = (end_time - start_time) * 1000  # ms
+                latency = (end_time - start_time) * 1000
                 latencies.append(latency)
 
-                # Замер памяти после инференса
-                memory_after = process.memory_info().rss / 1024 / 1024  # MB
+                memory_after = process.memory_info().rss / 1024 / 1024
                 memory_usage.append(memory_after - memory_before)
 
             except Exception as e:
@@ -102,11 +97,9 @@ class BatchOptimizer:
             if (i + 1) % 10 == 0:
                 print(f"  Завершено {i + 1}/{num_iterations} итераций")
 
-        # Вычисление статистик
         latencies = np.array(latencies)
         memory_usage = np.array(memory_usage)
 
-        # Latency per sample (нормализуем на размер батча)
         latencies_per_sample = latencies / batch_size
 
         results = {
@@ -163,10 +156,9 @@ class BatchOptimizer:
         """
         print("=== Поиск оптимального размера батча ===\n")
 
-        # Тестируемые размеры батчей
         batch_sizes = [2**i for i in range(int(np.log2(max_batch_size)) + 1)]
         batch_sizes = [bs for bs in batch_sizes if bs <= max_batch_size]
-        batch_sizes = [1] + batch_sizes  # Добавляем batch_size=1 для сравнения
+        batch_sizes = [1] + batch_sizes
 
         print(f"Тестируемые размеры батчей: {batch_sizes}")
         print(f"Итераций для каждого размера: {num_iterations}")
@@ -208,7 +200,6 @@ class BatchOptimizer:
 
         df = pd.DataFrame(results)
 
-        # Применение ограничений
         valid_df = df.copy()
 
         if max_memory_mb:
@@ -224,8 +215,6 @@ class BatchOptimizer:
             print("Выбираем лучший по p95 latency per sample из всех вариантов")
             valid_df = df
 
-        # Выбор оптимального размера
-        # Критерий: минимальный p95 latency per sample
         optimal_idx = valid_df["p95_latency_per_sample_ms"].idxmin()
         optimal_batch_size = valid_df.loc[optimal_idx, "batch_size"]
 
@@ -247,28 +236,24 @@ class BatchOptimizer:
         fig, axes = plt.subplots(2, 2, figsize=(15, 10))
         fig.suptitle("Batch Size Optimization Results", fontsize=16)
 
-        # P95 Latency per Sample
         axes[0, 0].plot(df["batch_size"], df["p95_latency_per_sample_ms"], "bo-")
         axes[0, 0].set_xlabel("Batch Size")
         axes[0, 0].set_ylabel("P95 Latency per Sample (ms)")
         axes[0, 0].set_title("P95 Latency per Sample vs Batch Size")
         axes[0, 0].grid(True)
 
-        # Throughput
         axes[0, 1].plot(df["batch_size"], df["throughput_samples_per_sec"], "go-")
         axes[0, 1].set_xlabel("Batch Size")
         axes[0, 1].set_ylabel("Throughput (samples/sec)")
         axes[0, 1].set_title("Throughput vs Batch Size")
         axes[0, 1].grid(True)
 
-        # Memory Usage
         axes[1, 0].plot(df["batch_size"], df["memory_max_mb"], "ro-")
         axes[1, 0].set_xlabel("Batch Size")
         axes[1, 0].set_ylabel("Max Memory Usage (MB)")
         axes[1, 0].set_title("Memory Usage vs Batch Size")
         axes[1, 0].grid(True)
 
-        # Efficiency (throughput / memory)
         efficiency = df["throughput_samples_per_sec"] / df["memory_max_mb"]
         axes[1, 1].plot(df["batch_size"], efficiency, "mo-")
         axes[1, 1].set_xlabel("Batch Size")
@@ -278,7 +263,6 @@ class BatchOptimizer:
 
         plt.tight_layout()
 
-        # Создание папки если нужно
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"График сохранен: {save_path}")
@@ -299,19 +283,16 @@ def main():
     optimizer = BatchOptimizer(onnx_path)
     optimizer.load_model()
 
-    # Поиск оптимального размера батча
     optimal_batch_size, results_df = optimizer.find_optimal_batch_size(
-        max_batch_size=8,  # Небольшой размер для CPU
+        max_batch_size=8,
         num_iterations=30,
-        max_memory_mb=500,  # 500 MB лимит памяти
-        target_p95_ms=100,  # 100 ms целевой p95 latency per sample
+        max_memory_mb=500,
+        target_p95_ms=100,
     )
 
-    # Сохранение результатов
     results_df.to_csv("results/optimization_results.csv", index=False)
     print("Результаты сохранены: results/optimization_results.csv")
 
-    # Визуализация
     optimizer.plot_results(results_df)
 
     print(f"\n✅ Оптимизация завершена. Рекомендуемый batch_size: {optimal_batch_size}")
