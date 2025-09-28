@@ -27,7 +27,6 @@ class ActiveLearningDataManager:
         self.y_test = None
         self._is_loaded = False
 
-        # Active Learning specific attributes
         self.X_labeled = None
         self.y_labeled = None
         self.X_pool = None
@@ -43,19 +42,16 @@ class ActiveLearningDataManager:
         """
         logger.info("Loading Forest Cover Type dataset...")
 
-        # Load the dataset
         covtype = fetch_covtype()
         X, y = covtype.data, covtype.target
 
         logger.info(f"Dataset shape: {X.shape}")
         logger.info(f"Number of classes: {len(np.unique(y))}")
 
-        # First split: separate test set (20%)
         X_temp, self.X_test, y_temp, self.y_test = train_test_split(
             X, y, test_size=0.2, random_state=self.random_seed, stratify=y
         )
 
-        # Second split: separate validation set (20% of remaining = 16% of total)
         self.X_train_full, self.X_val, self.y_train_full, self.y_val = train_test_split(
             X_temp,
             y_temp,
@@ -102,7 +98,6 @@ class ActiveLearningDataManager:
 
         n_samples = int(percentage * len(self.X_train_full))
 
-        # Take first n_samples to ensure consistent incremental growth
         X_train_subset = self.X_train_full[:n_samples]
         y_train_subset = self.y_train_full[:n_samples]
 
@@ -180,14 +175,11 @@ class ActiveLearningDataManager:
         if not self._is_loaded:
             raise ValueError("Data not loaded. Call load_and_split_data() first.")
 
-        # Calculate initial labeled set size
         n_initial = int(initial_percentage * len(self.X_train_full))
 
-        # Create initial labeled set (first n_initial samples)
         self.labeled_indices = list(range(n_initial))
         self.pool_indices = list(range(n_initial, len(self.X_train_full)))
 
-        # Set labeled and pool data
         self.X_labeled = self.X_train_full[self.labeled_indices].copy()
         self.y_labeled = self.y_train_full[self.labeled_indices].copy()
         self.X_pool = self.X_train_full[self.pool_indices].copy()
@@ -230,19 +222,15 @@ class ActiveLearningDataManager:
                 "Pool not initialized. Call initialize_active_learning() first."
             )
 
-        # Get selected samples
         selected_X = self.X_pool[selected_indices]
         selected_y = self.y_pool[selected_indices]
 
-        # Add to labeled set
         self.X_labeled = np.vstack([self.X_labeled, selected_X])
         self.y_labeled = np.concatenate([self.y_labeled, selected_y])
 
-        # Update indices
         pool_indices_to_add = [self.pool_indices[i] for i in selected_indices]
         self.labeled_indices.extend(pool_indices_to_add)
 
-        # Remove from pool
         remaining_indices = np.setdiff1d(range(len(self.X_pool)), selected_indices)
         self.X_pool = self.X_pool[remaining_indices]
         self.y_pool = self.y_pool[remaining_indices]
@@ -276,7 +264,6 @@ class ActiveLearningDataManager:
         if self.X_pool is None or len(self.X_pool) == 0:
             raise ValueError("Pool is empty or not initialized")
 
-        # Return up to batch_size samples from pool
         actual_batch_size = min(batch_size, len(self.X_pool))
         return self.X_pool[:actual_batch_size], self.y_pool[:actual_batch_size]
 
