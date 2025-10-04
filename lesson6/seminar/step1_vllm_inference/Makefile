@@ -38,7 +38,7 @@ logs:
 
 test:
 	@echo "Testing Ollama client..."
-	poetry run python test_client.py
+	poetry run python test_scripts/test_client.py
 
 notebook:
 	@echo "Starting Jupyter notebook..."
