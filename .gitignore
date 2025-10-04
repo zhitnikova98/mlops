@@ -81,3 +81,4 @@ batch_state.json
 # Lesson 4 - step4 homework (exclude all except README)
 lesson4/seminar/step4_monitoring/*
 !lesson4/seminar/step4_monitoring/README.md
+lesson5/**/catboost_info/
